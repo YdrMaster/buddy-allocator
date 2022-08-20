@@ -5,8 +5,8 @@
 
 use core::{alloc::Layout, num::NonZeroUsize, ptr::NonNull};
 
-/// 寡头集合。伙伴分配器的顶层，不再合并。
-pub trait OligarchyCollection {
+/// 伙伴分配器的一个行。
+pub trait BuddyLine {
     /// 支持的最小阶数。
     ///
     /// 0 表示支持 1 字节的分配。
@@ -19,39 +19,30 @@ pub trait OligarchyCollection {
     #[inline]
     fn set_order(&mut self, _order: usize) {}
 
+    /// 提取指定位置的元素，返回是否提取到。
+    #[inline]
+    fn take(&mut self, _idx: usize) -> bool {
+        unimplemented!()
+    }
+}
+
+/// 寡头集合。伙伴分配器的顶层，不再合并。
+pub trait OligarchyCollection: BuddyLine {
     /// 提取任何 `count` 个满足 `align_order` 的内存块。
     ///
     /// 返回提取到第一个元素的序号。找不到连续的那么多块，返回 [`None`]。
     fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize>;
-
-    /// 提取指定位置的元素，返回是否提取到。
-    fn take(&mut self, idx: usize) -> bool;
 
     /// 放入一个元素 `idx`。
     fn put(&mut self, idx: usize);
 }
 
 /// 伙伴集合。一组同阶的伙伴。
-pub trait BuddyCollection {
-    /// 支持的最小阶数。
-    ///
-    /// 0 表示支持 1 字节的分配。
-    const MIN_ORDER: usize;
-
-    /// 空集合。用于静态初始化。
-    const EMPTY: Self;
-
-    /// 侵入式伙伴分配器需要集合知道自己的阶数。只适用于非侵入式的集合不用实现。
-    #[inline]
-    fn set_order(&mut self, _order: usize) {}
-
+pub trait BuddyCollection: BuddyLine {
     /// 提取任何一个满足 `align_order` 的内存块。
     ///
     /// 返回提取到的元素。如果集合为空则无法提取，返回 [`None`]。
     fn take_any(&mut self, align_order: usize) -> Option<usize>;
-
-    /// 提取指定位置的元素，返回是否提取到。
-    fn take(&mut self, idx: usize) -> bool;
 
     /// 放入一个元素 `idx`。
     ///
@@ -69,7 +60,7 @@ pub struct BuddyAllocator<const N: usize, O: OligarchyCollection, B: BuddyCollec
     /// 寡头集合。
     oligarchy: O,
 
-    /// `N` 阶 `C` 型伙伴集合。
+    /// `N` 阶 `B` 型伙伴集合。
     buddies: [B; N],
 
     /// 最小阶数。
