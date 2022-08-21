@@ -1,7 +1,8 @@
 //! 伙伴分配器。
 
 #![no_std]
-// #![deny(warnings, unstable_features, missing_docs)]
+#![deny(warnings, unstable_features, missing_docs)]
+#![allow(unused)]
 
 #[cfg(feature = "bitvec")]
 mod bitvec;
@@ -9,9 +10,12 @@ mod bitvec;
 #[cfg(feature = "bitvec")]
 pub use bitvec::BitArrayBuddy;
 
-mod avl;
+mod linked_list;
 
-pub use avl::*;
+// TODO
+// mod avl;
+
+pub use linked_list::LinkedListBuddy;
 
 use core::{alloc::Layout, fmt, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
@@ -253,4 +257,30 @@ impl<const N: usize, O: OligarchyCollection + fmt::Debug, B: BuddyCollection + f
 #[inline]
 const fn nonzero(val: usize) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(val) }
+}
+
+/// 侵入式转换。
+struct Intrusive {
+    base: usize,
+    order: usize,
+}
+
+impl Intrusive {
+    const ZERO: Self = Self { base: 0, order: 0 };
+
+    #[inline]
+    fn init(&mut self, base: usize, order: usize) {
+        self.base = base;
+        self.order = order;
+    }
+
+    #[inline]
+    unsafe fn idx_to_ptr(&self, idx: usize) -> NonNull<u8> {
+        NonNull::new_unchecked(((idx + self.base) << self.order) as *mut u8)
+    }
+
+    #[inline]
+    unsafe fn ptr_to_idx(&self, ptr: NonNull<u8>) -> usize {
+        ((ptr.as_ptr() as usize) >> self.order) - self.base
+    }
 }

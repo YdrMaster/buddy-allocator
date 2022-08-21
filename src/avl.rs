@@ -1,4 +1,34 @@
-﻿use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
+﻿// # 静止的 AVL 树左右子树的高度差的绝对值最大为 1
+//
+// 如果如下的树是 AVL 树：
+//
+//     A
+//    / \
+//   B   γ
+//  / \
+// α   β
+//
+// 则 | α - β | <= 1, | max(α, β) + 1 - γ | <= 1。
+//
+// 如果这是一个需要右单旋的情况（α - β = 1, B - γ = 2），设 x = β，显然：
+//
+// - α = x + 1
+// - β = x
+// - γ = x
+// - A = x + 3
+// - B = x + 2
+//
+// 经过一次右单旋：
+//
+//   B     | - α = x + 1
+//  / \    | - β = x
+// α   A   | - γ = x
+//    / \  | - A = x + 1
+//   β   γ | - B = x + 2
+//
+// B 的高度不变但整棵树的高度降低 1。
+
+use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
 use core::{fmt, ptr::NonNull};
 
 /// 基于平衡二叉查找树的侵入式伙伴行。
