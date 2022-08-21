@@ -36,7 +36,7 @@ pub trait BuddyLine {
 pub trait OligarchyCollection: BuddyLine {
     /// 提取任何 `count` 个满足 `align_order` 的内存块。
     ///
-    /// 返回提取到第一个元素的序号。找不到连续的那么多块，返回 [`None`]。
+    /// 返回提取到第一个元素的序号。若找不到连续的那么多块，返回 [`None`]。
     fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize>;
 
     /// 放入一个元素 `idx`。
@@ -47,12 +47,12 @@ pub trait OligarchyCollection: BuddyLine {
 pub trait BuddyCollection: BuddyLine {
     /// 提取任何一个满足 `align_order` 的内存块。
     ///
-    /// 返回提取到的元素。如果集合为空则无法提取，返回 [`None`]。
+    /// 返回提取到的元素。若集合为空则无法提取，返回 [`None`]。
     fn take_any(&mut self, align_order: usize) -> Option<usize>;
 
     /// 放入一个元素 `idx`。
     ///
-    /// 如果 `idx` 的伙伴元素存在，则两个元素都被提取并他们在上一层的序号。
+    /// 如果 `idx` 的伙伴元素存在，则两个元素都被提取并返回他们在上一层的序号。
     /// 否则 `idx` 被放入集合。
     fn put(&mut self, idx: usize) -> Option<usize>;
 }

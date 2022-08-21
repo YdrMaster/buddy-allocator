@@ -24,13 +24,12 @@ fn main() {
 
     println!();
     println!("{allocator:?}");
-    allocator.deallocate(ptr0..non_null(ptr0.as_ptr() as usize + 4096));
+    allocator.deallocate(ptr0..non_null(ptr0.as_ptr() as usize + size0));
     println!("{allocator:?}");
-    allocator.deallocate(ptr1..non_null(ptr1.as_ptr() as usize + 4096));
+    allocator.deallocate(ptr1..non_null(ptr1.as_ptr() as usize + size1));
     println!("{allocator:?}");
-    allocator.deallocate(ptr2..non_null(ptr2.as_ptr() as usize + 8192));
+    allocator.deallocate(ptr2..non_null(ptr2.as_ptr() as usize + size2));
     println!("{allocator:?}");
-    println!();
 }
 
 #[inline]
