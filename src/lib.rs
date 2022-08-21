@@ -3,7 +3,7 @@
 #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 
-use core::{alloc::Layout, num::NonZeroUsize, ptr::NonNull};
+use core::{alloc::Layout, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
 /// 伙伴分配器的一个行。
 pub trait BuddyLine {
@@ -95,14 +95,22 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         self.buddies
             .iter_mut()
             .enumerate()
+            .rev()
             .for_each(|(i, c)| c.set_order(self.min_order + i));
     }
 
     /// 分配。
-    pub fn allocate(&mut self, layout: Layout) -> Result<NonNull<u8>, BuddyError> {
+    ///
+    /// 如果分配成功，返回一个能容纳 `layout` 的 `(指针, 长度)` 二元组。
+    pub fn allocate(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), BuddyError> {
+        #[inline]
+        const fn allocated<T>(ptr: *mut T, size: usize) -> (NonNull<u8>, usize) {
+            (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
+        }
+
         // 支持零长分配
         if layout.size() == 0 {
-            return Ok(allocated(self));
+            return Ok(allocated(self, 0));
         }
         // 容量的阶数
         let size = nonzero(layout.size());
@@ -112,6 +120,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             // 向上取整
             (usize::BITS - size.leading_zeros()) as usize
         };
+        let size_order = size_order.max(self.min_order);
         // 对齐的阶数
         let align_order = nonzero(layout.align()).trailing_zeros() as usize;
         let max_order = self.min_order + Self::MAX_LAYER;
@@ -121,14 +130,14 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                 .oligarchy
                 .take_any(align_order >> max_order, 1 << (size_order - max_order))
             {
-                Some(idx) => Ok(allocated((idx << max_order) as *mut ())),
+                Some(idx) => Ok(allocated((idx << max_order) as *mut (), 1 << size_order)),
                 None => Err(BuddyError),
             }
         } else {
             let layer = size_order - self.min_order;
             match self.buddies[layer].take_any(align_order >> size_order) {
                 // 一次分配成功
-                Some(idx) => Ok(allocated((idx << size_order) as *mut ())),
+                Some(idx) => Ok(allocated((idx << size_order) as *mut (), 1 << size_order)),
                 // 分配失败，需要上去借
                 None => {
                     let mut ancestor = layer + 1;
@@ -154,36 +163,42 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                         assert!(self.buddies[layer].put(idx + 1).is_none());
                     }
                     // 完成
-                    Ok(allocated((idx << size_order) as *mut ()))
+                    Ok(allocated((idx << size_order) as *mut (), 1 << size_order))
                 }
             }
         }
     }
 
     /// 回收。
-    pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        // 换成 usize 方便操作
-        let mut ptr = ptr.as_ptr() as usize;
-        let end = ptr + layout.size();
-        while ptr < end {
+    pub fn deallocate(&mut self, mut range: Range<usize>) {
+        assert_ne!(0, range.start);
+        let max_order = self.min_order + Self::MAX_LAYER;
+        while !range.is_empty() {
             // 剩余长度
-            let len = nonzero(end - ptr);
+            let len = nonzero(range.len());
             // 指针的对齐决定最大阶数
-            let order_ptr = nonzero(ptr).trailing_zeros();
+            let order_ptr = nonzero(range.start).trailing_zeros();
             // 长度向下取整也决定最大阶数
             let order_len = usize::BITS - len.leading_zeros() - 1;
             // 实际阶数是两个最大阶数中较小的那个
             let order = order_ptr.min(order_len) as usize;
-            // 在分配器里的层数
-            let layer = (order - self.min_order).min(Self::MAX_LAYER);
-            // 在层中的块数
-            let count = len.get() >> (self.min_order + layer);
-            // 移动指针到这一组全部释放的位置
-            ptr += count << (self.min_order + layer);
-            // 逐块释放
-            for mut idx in 0..count {
-                // 逐层释放
-                for layer in layer.. {
+            // 直接释放寡头
+            if order >= max_order {
+                // 寡头序号
+                let idx = range.start >> max_order;
+                // 寡头数量
+                let count = len.get() >> max_order;
+                // 移动指针
+                range.start += count << max_order;
+                // 释放
+                (idx..).take(count).for_each(|idx| self.oligarchy.put(idx));
+            } else {
+                // 伙伴序号
+                let mut idx = range.start >> order;
+                // 移动指针
+                range.start += 1 << order;
+                // 释放
+                for layer in (order - self.min_order).. {
                     // 释放寡头
                     if layer == Self::MAX_LAYER {
                         self.oligarchy.put(idx);
@@ -198,11 +213,6 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             }
         }
     }
-}
-
-#[inline]
-const fn allocated<T>(ptr: *mut T) -> NonNull<u8> {
-    unsafe { NonNull::new_unchecked(ptr).cast() }
 }
 
 #[inline]
