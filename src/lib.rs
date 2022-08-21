@@ -9,6 +9,10 @@ mod bitvec;
 #[cfg(feature = "bitvec")]
 pub use bitvec::BitArrayBuddy;
 
+mod avl;
+
+pub use avl::*;
+
 use core::{alloc::Layout, fmt, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
 /// 伙伴分配器的一个行。
@@ -233,11 +237,6 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     }
 }
 
-#[inline]
-const fn nonzero(val: usize) -> NonZeroUsize {
-    unsafe { NonZeroUsize::new_unchecked(val) }
-}
-
 impl<const N: usize, O: OligarchyCollection + fmt::Debug, B: BuddyCollection + fmt::Debug>
     fmt::Debug for BuddyAllocator<N, O, B>
 {
@@ -249,4 +248,9 @@ impl<const N: usize, O: OligarchyCollection + fmt::Debug, B: BuddyCollection + f
         }
         writeln!(f, "{:>2}> {:?}", self.max_order(), self.oligarchy)
     }
+}
+
+#[inline]
+const fn nonzero(val: usize) -> NonZeroUsize {
+    unsafe { NonZeroUsize::new_unchecked(val) }
 }

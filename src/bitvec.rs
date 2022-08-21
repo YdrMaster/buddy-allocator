@@ -1,5 +1,6 @@
 ﻿use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
 use bitvec_crate::{prelude::BitArray, view::BitViewSized};
+use core::fmt;
 
 /// 用一个 `BitArray` 保存占用情况的伙伴行。
 ///
@@ -120,5 +121,15 @@ impl<A: BitViewSized> BuddyCollection for BitArrayBuddy<A> {
             self.swap_unchecked(idx, true);
             None
         }
+    }
+}
+
+impl<A: BitViewSized> fmt::Debug for BitArrayBuddy<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        '['.fmt(f)?;
+        for i in self.bits.iter_ones() {
+            write!(f, "{}, ", self.base + i)?;
+        }
+        ']'.fmt(f)
     }
 }
