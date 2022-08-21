@@ -3,6 +3,12 @@
 #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 
+#[cfg(feature = "bitvec")]
+mod bitvec;
+
+#[cfg(feature = "bitvec")]
+pub use bitvec::BitArrayBuddy;
+
 use core::{alloc::Layout, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
 /// 伙伴分配器的一个行。
@@ -15,9 +21,9 @@ pub trait BuddyLine {
     /// 空集合。用于静态初始化。
     const EMPTY: Self;
 
-    /// 侵入式伙伴分配器需要集合知道自己的阶数。只适用于非侵入式的集合不用实现。
+    /// 伙伴分配器可能需要集合知道自己的阶数和基序号。
     #[inline]
-    fn set_order(&mut self, _order: usize) {}
+    fn init(&mut self, _order: usize, _base: usize) {}
 
     /// 提取指定位置的元素，返回是否提取到。
     #[inline]
@@ -76,27 +82,37 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
 
     /// 构造分配器。
     #[inline]
-    pub const fn new(min_order: usize) -> Self {
-        assert!(B::MIN_ORDER <= min_order);
-        assert!(O::MIN_ORDER <= min_order + Self::MAX_LAYER);
+    pub const fn new() -> Self {
         Self {
             oligarchy: O::EMPTY,
             buddies: [B::EMPTY; N],
-            min_order,
+            min_order: 0,
         }
+    }
+
+    #[inline]
+    const fn max_order(&self) -> usize {
+        self.min_order + Self::MAX_LAYER
     }
 
     /// 运行时初始化。
     ///
     /// 设置每个伙伴集合的阶数。
     #[inline]
-    pub fn init(&mut self) {
-        self.oligarchy.set_order(self.min_order + Self::MAX_LAYER);
+    pub fn init(&mut self, min_order: usize, base: NonNull<u8>) {
+        self.min_order = min_order;
+        let max_order = self.max_order();
+
+        assert!(B::MIN_ORDER <= max_order);
+        assert!(O::MIN_ORDER <= max_order);
+
+        let base = base.as_ptr() as usize;
         self.buddies
             .iter_mut()
             .enumerate()
-            .rev()
-            .for_each(|(i, c)| c.set_order(self.min_order + i));
+            .map(|(i, c)| (self.min_order + i, c))
+            .for_each(|(o, c)| c.init(o, base >> o));
+        self.oligarchy.init(max_order, base >> max_order);
     }
 
     /// 分配。
@@ -170,14 +186,15 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     }
 
     /// 回收。
-    pub fn deallocate(&mut self, mut range: Range<usize>) {
-        assert_ne!(0, range.start);
+    pub fn deallocate(&mut self, range: Range<NonNull<u8>>) {
+        let mut ptr = range.start.as_ptr() as usize;
+        let end = range.end.as_ptr() as usize;
         let max_order = self.min_order + Self::MAX_LAYER;
-        while !range.is_empty() {
+        while ptr < end {
             // 剩余长度
-            let len = nonzero(range.len());
+            let len = nonzero(end - ptr);
             // 指针的对齐决定最大阶数
-            let order_ptr = nonzero(range.start).trailing_zeros();
+            let order_ptr = nonzero(ptr).trailing_zeros();
             // 长度向下取整也决定最大阶数
             let order_len = usize::BITS - len.leading_zeros() - 1;
             // 实际阶数是两个最大阶数中较小的那个
@@ -185,18 +202,18 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             // 直接释放寡头
             if order >= max_order {
                 // 寡头序号
-                let idx = range.start >> max_order;
+                let idx = ptr >> max_order;
                 // 寡头数量
                 let count = len.get() >> max_order;
                 // 移动指针
-                range.start += count << max_order;
+                ptr += count << max_order;
                 // 释放
                 (idx..).take(count).for_each(|idx| self.oligarchy.put(idx));
             } else {
                 // 伙伴序号
-                let mut idx = range.start >> order;
+                let mut idx = ptr >> order;
                 // 移动指针
-                range.start += 1 << order;
+                ptr += 1 << order;
                 // 释放
                 for layer in (order - self.min_order).. {
                     // 释放寡头

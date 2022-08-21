@@ -14,3 +14,7 @@ categories = ["no-std"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bitvec_crate = { version = "1", package = "bitvec", optional = true }
+
+[features]
+bitvec = ["bitvec_crate"]

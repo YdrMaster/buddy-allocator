@@ -1,14 +1,19 @@
 ﻿use buddy_allocator::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection};
-use std::{alloc::Layout, collections::BTreeSet, mem::MaybeUninit};
+use std::{alloc::Layout, collections::BTreeSet, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {
-    let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new(12);
-    allocator.init();
+    let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new();
+    allocator.init(12, non_null(0x1000));
     println!();
     allocator.allocate(Layout::new::<usize>()).unwrap_err();
     println!();
-    allocator.deallocate(0x1000..0x8000_0000);
+    allocator.deallocate(non_null(0x1000)..non_null(0x8000_0000));
     println!();
+}
+
+#[inline]
+fn non_null(addr: usize) -> NonNull<u8> {
+    NonNull::new(addr as *mut _).unwrap()
 }
 
 struct BuddySet {
@@ -24,10 +29,9 @@ impl BuddyLine for BuddySet {
         order: Self::MIN_ORDER,
     };
 
-    fn set_order(&mut self, order: usize) {
-        println!("Buddies[{order}] set order = {order}");
-        self.set = MaybeUninit::new(BTreeSet::new());
+    fn init(&mut self, order: usize, base: usize) {
         self.order = order;
+        println!("Buddies[{order}] init as base = {base} order = {order}");
     }
 
     fn take(&mut self, idx: usize) -> bool {
