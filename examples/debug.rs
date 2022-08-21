@@ -1,13 +1,35 @@
 ﻿use buddy_allocator::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection};
-use std::{alloc::Layout, collections::BTreeSet, mem::MaybeUninit, ptr::NonNull};
+use std::{alloc::Layout, collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {
     let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new();
     allocator.init(12, non_null(0x1000));
     println!();
-    allocator.allocate(Layout::new::<usize>()).unwrap_err();
+    assert!(allocator.allocate(Layout::new::<usize>()).is_err());
     println!();
     allocator.deallocate(non_null(0x1000)..non_null(0x8000_0000));
+
+    println!();
+    println!("{allocator:?}");
+    let (ptr0, size0) = allocator.allocate(Layout::new::<[u8; 2048]>()).unwrap();
+    println!("{allocator:?}");
+    let (ptr1, size1) = allocator.allocate(Layout::new::<[u8; 4096]>()).unwrap();
+    println!("{allocator:?}");
+    let (ptr2, size2) = allocator.allocate(Layout::new::<[u8; 4097]>()).unwrap();
+    println!("{allocator:?}");
+
+    assert_eq!(4096, size0);
+    assert_eq!(4096, size1);
+    assert_eq!(8192, size2);
+
+    println!();
+    println!("{allocator:?}");
+    allocator.deallocate(ptr0..non_null(ptr0.as_ptr() as usize + 4096));
+    println!("{allocator:?}");
+    allocator.deallocate(ptr1..non_null(ptr1.as_ptr() as usize + 4096));
+    println!("{allocator:?}");
+    allocator.deallocate(ptr2..non_null(ptr2.as_ptr() as usize + 8192));
+    println!("{allocator:?}");
     println!();
 }
 
@@ -42,7 +64,10 @@ impl BuddyLine for BuddySet {
 
 impl OligarchyCollection for BuddySet {
     fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize> {
-        println!("Buddies[{}] take {count} align = {align_order}", self.order);
+        println!(
+            "Buddies[{}] take {count} with align = {align_order}",
+            self.order
+        );
         assert!(count == 1);
         let set = unsafe { self.set.assume_init_mut() };
         set.iter().next().copied().map(|i| {
@@ -60,7 +85,7 @@ impl OligarchyCollection for BuddySet {
 
 impl BuddyCollection for BuddySet {
     fn take_any(&mut self, align_order: usize) -> Option<usize> {
-        println!("Buddies[{}] take one align = {align_order}", self.order);
+        println!("Buddies[{}] take 1 with align = {align_order}", self.order);
         let set = unsafe { self.set.assume_init_mut() };
         set.iter().next().copied().map(|i| {
             set.remove(&i);
@@ -71,11 +96,17 @@ impl BuddyCollection for BuddySet {
     fn put(&mut self, idx: usize) -> Option<usize> {
         println!("Buddies[{}] put buddy at = {idx}", self.order);
         let set = unsafe { self.set.assume_init_mut() };
-        if set.remove(&(idx & !1)) {
+        if set.remove(&(idx ^ 1)) {
             Some(idx >> 1)
         } else {
             set.insert(idx);
             None
         }
+    }
+}
+
+impl fmt::Debug for BuddySet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", unsafe { self.set.assume_init_ref() })
     }
 }

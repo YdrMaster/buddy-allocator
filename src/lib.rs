@@ -9,7 +9,7 @@ mod bitvec;
 #[cfg(feature = "bitvec")]
 pub use bitvec::BitArrayBuddy;
 
-use core::{alloc::Layout, num::NonZeroUsize, ops::Range, ptr::NonNull};
+use core::{alloc::Layout, fmt, num::NonZeroUsize, ops::Range, ptr::NonNull};
 
 /// 伙伴分配器的一个行。
 pub trait BuddyLine {
@@ -58,6 +58,7 @@ pub trait BuddyCollection: BuddyLine {
 }
 
 /// 伙伴分配器分配失败。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct BuddyError;
 
@@ -235,4 +236,17 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
 #[inline]
 const fn nonzero(val: usize) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(val) }
+}
+
+impl<const N: usize, O: OligarchyCollection + fmt::Debug, B: BuddyCollection + fmt::Debug>
+    fmt::Debug for BuddyAllocator<N, O, B>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "BuddyAllocator@{:#018x}", self as *const _ as usize)?;
+        writeln!(f, "---------------------------------")?;
+        for (i, line) in self.buddies.iter().enumerate() {
+            writeln!(f, "{:>2}> {line:?}", self.min_order + i)?;
+        }
+        writeln!(f, "{:>2}> {:?}", self.max_order(), self.oligarchy)
+    }
 }
