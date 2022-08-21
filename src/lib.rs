@@ -1,7 +1,7 @@
 //! 伙伴分配器。
 
 #![no_std]
-#![deny(warnings, unstable_features, missing_docs)]
+// #![deny(warnings, unstable_features, missing_docs)]
 
 #[cfg(feature = "bitvec")]
 mod bitvec;
