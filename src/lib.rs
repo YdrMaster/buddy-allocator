@@ -4,16 +4,12 @@
 #![deny(warnings, unstable_features, missing_docs)]
 #![allow(unused)]
 
-#[cfg(feature = "bitvec")]
-mod bitvec;
-
-#[cfg(feature = "bitvec")]
-pub use bitvec::BitArrayBuddy;
-
 // TODO
 // mod avl;
+mod bitmap;
 mod linked_list;
 
+pub use bitmap::UsizeBuddy;
 pub use linked_list::LinkedListBuddy;
 
 use core::{alloc::Layout, fmt, num::NonZeroUsize, ptr::NonNull};

@@ -1,11 +1,11 @@
-﻿use buddy_allocator::{BitArrayBuddy, BuddyAllocator, LinkedListBuddy};
+﻿use buddy_allocator::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},
     time::Instant,
 };
 
-type Allocator<const N: usize> = BuddyAllocator<N, BitArrayBuddy, LinkedListBuddy>;
+type Allocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, LinkedListBuddy>;
 
 #[repr(C, align(4096))]
 struct Page([u8; 4096]);
@@ -48,7 +48,8 @@ BEFORE
         debug_assert_eq!(layout.size(), size);
         *block = ptr.as_ptr();
     }
-    println!("allocate {:?}", t.elapsed() / blocks.len() as u32);
+    let t = t.elapsed();
+    println!("allocate   {t:?} ({} times)", blocks.len());
 
     assert_eq!(len, allocator.capacity());
     assert_eq!(len - blocks.len() * layout.size(), allocator.free());
@@ -58,7 +59,8 @@ BEFORE
         allocator.deallocate(NonNull::new(*block).unwrap(), layout.size());
         *block = null_mut();
     }
-    println!("deallocate {:?}", t.elapsed() / blocks.len() as u32);
+    let t = t.elapsed();
+    println!("deallocate {t:?} ({} times)", blocks.len());
 
     assert_eq!(len, allocator.capacity());
     assert_eq!(len, allocator.free());
