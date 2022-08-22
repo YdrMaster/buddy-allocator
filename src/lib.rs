@@ -1,6 +1,6 @@
 //! 伙伴分配器。
 
-#![no_std]
+// #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 #![allow(unused)]
 
@@ -137,68 +137,63 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         if layout.size() == 0 {
             return Ok(allocated(self, 0));
         }
-        // 容量的阶数
-        let size = nonzero(layout.size());
-        let size_order = if size.is_power_of_two() {
-            size.trailing_zeros() as usize
-        } else {
-            // 向上取整
-            (usize::BITS - size.leading_zeros()) as usize
-        };
-        let size_order = size_order.max(self.min_order);
+        // 要分配的容量
+        let page_mask = (1usize << self.min_order) - 1;
+        let ans_size = (layout.size() + page_mask) & !page_mask;
+        // 分配的阶数
+        let size_order = nonzero(ans_size.next_power_of_two()).trailing_zeros() as usize;
         // 对齐的阶数
         let align_order = nonzero(layout.align()).trailing_zeros() as usize;
-        let max_order = self.min_order + Self::MAX_LAYER;
-        if size_order >= max_order {
+        // 分配
+        let max_order = self.max_order();
+        let (ptr, alloc_size) = if size_order >= max_order {
             // 连续分配寡头
-            match self
-                .oligarchy
-                .take_any(align_order >> max_order, 1 << (size_order - max_order))
-            {
-                Some(idx) => Ok(allocated((idx << max_order) as *mut (), 1 << size_order)),
-                None => Err(BuddyError),
+            let count = ((ans_size >> (max_order - 1)) + 1) >> 1;
+            match self.oligarchy.take_any(align_order >> max_order, count) {
+                Some(idx) => (idx << max_order, count << max_order),
+                None => Err(BuddyError)?,
             }
         } else {
-            let layer = size_order - self.min_order;
-            match self.buddies[layer].take_any(align_order >> size_order) {
-                // 一次分配成功
-                Some(idx) => Ok(allocated((idx << size_order) as *mut (), 1 << size_order)),
-                // 分配失败，需要上去借
-                None => {
-                    let mut ancestor = layer + 1;
-                    let mut idx = loop {
-                        // 从寡头借
-                        if ancestor == Self::MAX_LAYER {
-                            match self.oligarchy.take_any(align_order >> max_order, 1) {
-                                Some(idx) => break idx,
-                                None => Err(BuddyError)?,
-                            }
-                        }
-                        // 从伙伴借
-                        match self.buddies[ancestor]
-                            .take_any(align_order >> (self.min_order + ancestor))
-                        {
-                            Some(idx) => break idx,
-                            None => ancestor += 1,
-                        }
-                    };
-                    // 多借的存回去
-                    for layer in (layer..ancestor).rev() {
-                        idx <<= 1;
-                        assert!(self.buddies[layer].put(idx + 1).is_none());
+            // 分配伙伴
+            let layer0 = size_order - self.min_order;
+            let mut layer = layer0;
+            let mut idx = loop {
+                // 从寡头借
+                if layer == Self::MAX_LAYER {
+                    match self.oligarchy.take_any(align_order >> max_order, 1) {
+                        Some(idx) => break idx,
+                        None => Err(BuddyError)?,
                     }
-                    // 完成
-                    Ok(allocated((idx << size_order) as *mut (), 1 << size_order))
                 }
+                // 从伙伴借
+                match self.buddies[layer].take_any(align_order >> (self.min_order + layer)) {
+                    Some(idx) => break idx,
+                    None => layer += 1,
+                }
+            };
+            // 存回多借用的
+            for layer in (layer0..layer).rev() {
+                idx <<= 1;
+                assert!(self.buddies[layer].put(idx + 1).is_none());
             }
+            // 完成
+            (idx << size_order, 1 << size_order)
+        };
+        // 存回为了对齐而多分配的
+        if alloc_size > ans_size {
+            self.deallocate(
+                unsafe { NonNull::new_unchecked((ptr + ans_size) as *mut u8) },
+                alloc_size - ans_size,
+            );
         }
+        Ok(allocated(ptr as *mut (), ans_size))
     }
 
     /// 回收。
-    pub fn deallocate(&mut self, range: Range<NonNull<u8>>) {
-        let mut ptr = range.start.as_ptr() as usize;
-        let end = range.end.as_ptr() as usize;
-        let max_order = self.min_order + Self::MAX_LAYER;
+    pub fn deallocate(&mut self, ptr: NonNull<u8>, size: usize) {
+        let mut ptr = ptr.as_ptr() as usize;
+        let end = ptr + size;
+        let max_order = self.max_order();
         while ptr < end {
             // 剩余长度
             let len = nonzero(end - ptr);

@@ -7,7 +7,7 @@ fn main() {
     println!();
     assert!(allocator.allocate(Layout::new::<usize>()).is_err());
     println!();
-    allocator.deallocate(non_null(0x1000)..non_null(0x8000_0000));
+    allocator.deallocate(non_null(0x1000), 0x7fff_f000);
 
     println!();
     println!("{allocator:?}");
@@ -15,20 +15,22 @@ fn main() {
     println!("{allocator:?}");
     let (ptr1, size1) = allocator.allocate(Layout::new::<[u8; 4096]>()).unwrap();
     println!("{allocator:?}");
-    let (ptr2, size2) = allocator.allocate(Layout::new::<[u8; 4097]>()).unwrap();
+    let (ptr2, size2) = allocator
+        .allocate(Layout::new::<[u8; 4096 * 3 - 1]>())
+        .unwrap();
     println!("{allocator:?}");
 
     assert_eq!(4096, size0);
     assert_eq!(4096, size1);
-    assert_eq!(8192, size2);
+    assert_eq!(4096 * 3, size2);
 
     println!();
     println!("{allocator:?}");
-    allocator.deallocate(ptr0..non_null(ptr0.as_ptr() as usize + size0));
+    allocator.deallocate(ptr0, size0);
     println!("{allocator:?}");
-    allocator.deallocate(ptr1..non_null(ptr1.as_ptr() as usize + size1));
+    allocator.deallocate(ptr1, size1);
     println!("{allocator:?}");
-    allocator.deallocate(ptr2..non_null(ptr2.as_ptr() as usize + size2));
+    allocator.deallocate(ptr2, size2);
     println!("{allocator:?}");
 }
 
