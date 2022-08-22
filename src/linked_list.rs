@@ -16,8 +16,8 @@ impl BuddyLine for LinkedListBuddy {
     };
 
     #[inline]
-    fn init(&mut self, order: usize, base: usize) {
-        self.intrusive.init(base, order)
+    fn init(&mut self, order: usize, _base: usize) {
+        self.intrusive.init(order)
     }
 
     fn take(&mut self, _idx: usize) -> bool {
@@ -52,11 +52,9 @@ impl BuddyCollection for LinkedListBuddy {
 
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 伙伴和当前结点存在链表的同一个位置。
-        let idx = idx & !1;
-        if self
-            .free_list
-            .insert(unsafe { self.intrusive.idx_to_ptr(idx) })
-        {
+        let node = unsafe { self.intrusive.idx_to_ptr(idx) };
+        let buddy = unsafe { self.intrusive.idx_to_ptr(idx ^ 1) };
+        if self.free_list.insert(node, buddy) {
             None
         } else {
             // 插入失败说明伙伴已碰头
@@ -84,16 +82,17 @@ impl Node {
     ///
     /// 这个函数可以尾递归的，但 Rust 并不支持优化尾递归。
     #[inline]
-    fn insert(&mut self, mut node: NonNull<Node>) -> bool {
+    fn insert(&mut self, mut node: NonNull<Node>, buddy: NonNull<Node>) -> bool {
         let mut cursor = self;
         loop {
             if let Some(mut next) = cursor.next {
-                match next.cmp(&node) {
+                match next.cmp(&buddy) {
                     // 新结点更大，找下一个
                     Less => cursor = unsafe { next.as_mut() },
                     // 相等，移除这一个
                     Equal => {
                         cursor.next = unsafe { next.as_ref().next };
+                        unsafe { node.as_mut() }.next = None;
                         break false;
                     }
                     // 新结点更小，插入
@@ -106,6 +105,7 @@ impl Node {
             } else {
                 // 没有下一个，插入
                 cursor.next = Some(node);
+                unsafe { node.as_mut() }.next = None;
                 break true;
             }
         }

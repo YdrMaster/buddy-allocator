@@ -107,9 +107,9 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
 
     /// 运行时初始化。
     ///
-    /// 设置每个伙伴集合的阶数。
+    /// 设置分配器分配的最小阶数和基址。
     #[inline]
-    pub fn init(&mut self, min_order: usize, base: NonNull<u8>) {
+    pub fn init<T>(&mut self, min_order: usize, base: NonNull<T>) {
         self.min_order = min_order;
         let max_order = self.max_order();
 
@@ -117,11 +117,10 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         assert!(Self::B_MIN_ORDER <= min_order);
 
         let base = base.as_ptr() as usize;
-        self.buddies
-            .iter_mut()
-            .enumerate()
-            .map(|(i, c)| (self.min_order + i, c))
-            .for_each(|(o, c)| c.init(o, base >> o));
+        self.buddies.iter_mut().enumerate().for_each(|(i, c)| {
+            let o = self.min_order + i;
+            c.init(o, base >> o)
+        });
         self.oligarchy.init(max_order, base >> max_order);
     }
 
@@ -191,7 +190,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     }
 
     /// 回收。
-    pub fn deallocate(&mut self, ptr: NonNull<u8>, size: usize) {
+    pub fn deallocate<T>(&mut self, ptr: NonNull<T>, size: usize) {
         let max_order = self.max_order();
 
         let mut ptr = ptr.as_ptr() as usize;
@@ -258,26 +257,24 @@ const fn nonzero(val: usize) -> NonZeroUsize {
 
 /// 侵入式转换。
 struct Intrusive {
-    base: usize,
     order: usize,
 }
 
 impl Intrusive {
-    const ZERO: Self = Self { base: 0, order: 0 };
+    const ZERO: Self = Self { order: 0 };
 
     #[inline]
-    fn init(&mut self, base: usize, order: usize) {
-        self.base = base;
+    fn init(&mut self, order: usize) {
         self.order = order;
     }
 
     #[inline]
     unsafe fn idx_to_ptr<T>(&self, idx: usize) -> NonNull<T> {
-        NonNull::new_unchecked(((idx + self.base) << self.order) as *mut T)
+        NonNull::new_unchecked((idx << self.order) as *mut _)
     }
 
     #[inline]
-    unsafe fn ptr_to_idx<T>(&self, ptr: NonNull<T>) -> usize {
-        ((ptr.as_ptr() as usize) >> self.order) - self.base
+    fn ptr_to_idx<T>(&self, ptr: NonNull<T>) -> usize {
+        (ptr.as_ptr() as usize) >> self.order
     }
 }
