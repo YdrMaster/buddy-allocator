@@ -64,8 +64,15 @@ impl BuddyCollection for LinkedListBuddy {
 }
 
 impl fmt::Debug for LinkedListBuddy {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        let mut cursor = &self.free_list;
+        while let Some(mut next) = cursor.next {
+            self.intrusive.ptr_to_idx(next).fmt(f)?;
+            write!(f, ", ")?;
+            cursor = unsafe { next.as_ref() };
+        }
+        write!(f, "]")
     }
 }
 

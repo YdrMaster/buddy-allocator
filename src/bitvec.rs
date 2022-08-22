@@ -124,10 +124,11 @@ impl<A: BitViewSized> BuddyCollection for BitArrayBuddy<A> {
 
 impl<A: BitViewSized> fmt::Debug for BitArrayBuddy<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        '['.fmt(f)?;
+        write!(f, "[")?;
         for i in self.bits.iter_ones() {
-            write!(f, "{}, ", self.base + i)?;
+            (self.base + i).fmt(f)?;
+            write!(f, ", ")?;
         }
-        ']'.fmt(f)
+        write!(f, "]")
     }
 }

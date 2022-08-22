@@ -77,9 +77,14 @@ pub struct BuddyAllocator<const N: usize, O: OligarchyCollection, B: BuddyCollec
 
     /// 最小阶数。
     ///
-    /// `buddy[N - 1]` 伙伴集合分配内存块的阶数。
-    /// 不能小于 `C::MIN_ORDER`。
+    /// `buddy[0]` 伙伴行分配的内存块的阶数。
     min_order: usize,
+
+    /// 空闲容量。
+    free: usize,
+
+    /// 总容量。
+    capacity: usize,
 }
 
 impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<N, O, B> {
@@ -97,9 +102,24 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             oligarchy: O::EMPTY,
             buddies: [B::EMPTY; N],
             min_order: 0,
+            free: 0,
+            capacity: 0,
         }
     }
 
+    /// 返回分配器管理的总容量。
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// 返回分配器剩余的空间容量。
+    #[inline]
+    pub fn free(&self) -> usize {
+        self.free
+    }
+
+    /// 最大阶数。寡头块的阶数。
     #[inline]
     const fn max_order(&self) -> usize {
         self.min_order + Self::MAX_LAYER
@@ -110,6 +130,11 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     /// 设置分配器分配的最小阶数和基址。
     #[inline]
     pub fn init<T>(&mut self, min_order: usize, base: NonNull<T>) {
+        assert_eq!(
+            0, self.capacity,
+            "init is not allowed after any transfering"
+        );
+
         self.min_order = min_order;
         let max_order = self.max_order();
 
@@ -124,13 +149,27 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         self.oligarchy.init(max_order, base >> max_order);
     }
 
+    /// 将一个 `ptr` 指向的长度为 `usize` 的内存块转移给分配器。
+    ///
+    /// # Safety
+    ///
+    /// 调用者需要保证：
+    ///
+    /// - 这个内存块没有被其他任何对象引用；
+    /// - 这个内存块和已经托管的内存块不重叠。
+    #[inline]
+    pub unsafe fn transfer<T>(&mut self, ptr: NonNull<T>, size: usize) {
+        self.capacity += size;
+        self.deallocate(ptr, size)
+    }
+
     /// 分配。
     ///
     /// 如果分配成功，返回一个能容纳 `layout` 的 `(指针, 长度)` 二元组。
-    pub fn allocate(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), BuddyError> {
+    pub fn allocate<T>(&mut self, layout: Layout) -> Result<(NonNull<T>, usize), BuddyError> {
         let max_order = self.max_order();
         #[inline]
-        const fn allocated<T>(ptr: *mut T, size: usize) -> (NonNull<u8>, usize) {
+        const fn allocated<T, U>(ptr: *mut T, size: usize) -> (NonNull<U>, usize) {
             (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
         }
 
@@ -186,6 +225,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                 alloc_size - ans_size,
             );
         }
+        self.free -= ans_size;
         Ok(allocated(ptr as *mut (), ans_size))
     }
 
@@ -234,6 +274,13 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                 }
             }
         }
+        self.free += size;
+        assert!(
+            self.free <= self.capacity,
+            "something wrong with the free bytes, it is larger than the capacity: {} > {}",
+            self.free,
+            self.capacity
+        );
     }
 }
 

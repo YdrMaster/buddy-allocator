@@ -1,5 +1,9 @@
 ﻿use buddy_allocator::{BitArrayBuddy, BuddyAllocator, LinkedListBuddy};
-use std::ptr::NonNull;
+use std::{
+    alloc::Layout,
+    ptr::{null_mut, NonNull},
+    time::Instant,
+};
 
 type Allocator<const N: usize> = BuddyAllocator<N, BitArrayBuddy, LinkedListBuddy>;
 
@@ -23,9 +27,45 @@ fn main() {
         ptr.as_ptr() as usize,
         ptr.as_ptr() as usize + len
     );
-    for i in ptr.as_ptr() as usize..ptr.as_ptr() as usize + len {
-        unsafe { *(i as *mut u8) = 0xff };
+    let t = Instant::now();
+    unsafe { allocator.transfer(ptr, len) };
+    println!("transfer {:?}", t.elapsed());
+
+    assert_eq!(len, allocator.capacity());
+    assert_eq!(len, allocator.free());
+
+    println!(
+        "
+BEFORE
+{allocator:#x?}"
+    );
+
+    let mut blocks = [null_mut::<Page>(); 1024];
+    let layout = Layout::new::<Page>();
+    let t = Instant::now();
+    for block in blocks.iter_mut() {
+        let (ptr, size) = allocator.allocate(layout).unwrap();
+        debug_assert_eq!(layout.size(), size);
+        *block = ptr.as_ptr();
     }
-    allocator.deallocate(ptr, len);
-    println!("Hello, world!");
+    println!("allocate {:?}", t.elapsed() / blocks.len() as u32);
+
+    assert_eq!(len, allocator.capacity());
+    assert_eq!(len - blocks.len() * layout.size(), allocator.free());
+
+    let t = Instant::now();
+    for block in blocks.iter_mut() {
+        allocator.deallocate(NonNull::new(*block).unwrap(), layout.size());
+        *block = null_mut();
+    }
+    println!("deallocate {:?}", t.elapsed() / blocks.len() as u32);
+
+    assert_eq!(len, allocator.capacity());
+    assert_eq!(len, allocator.free());
+
+    println!(
+        "
+AFTER
+{allocator:#x?}"
+    );
 }
