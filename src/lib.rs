@@ -1,6 +1,6 @@
 //! 伙伴分配器。
 
-// #![no_std]
+#![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 #![allow(unused)]
 
@@ -10,24 +10,21 @@ mod bitvec;
 #[cfg(feature = "bitvec")]
 pub use bitvec::BitArrayBuddy;
 
-mod linked_list;
-
 // TODO
 // mod avl;
+mod linked_list;
 
 pub use linked_list::LinkedListBuddy;
 
-use core::{alloc::Layout, fmt, num::NonZeroUsize, ops::Range, ptr::NonNull};
+use core::{alloc::Layout, fmt, num::NonZeroUsize, ptr::NonNull};
 
 /// 伙伴分配器的一个行。
 pub trait BuddyLine {
-    /// 支持的最小阶数。
-    ///
-    /// 0 表示支持 1 字节的分配。
-    const MIN_ORDER: usize;
-
     /// 空集合。用于静态初始化。
     const EMPTY: Self;
+
+    /// 侵入式元数据的大小。
+    const INTRUSIVE_META_SIZE: usize = 0;
 
     /// 伙伴分配器可能需要集合知道自己的阶数和基序号。
     #[inline]
@@ -88,6 +85,10 @@ pub struct BuddyAllocator<const N: usize, O: OligarchyCollection, B: BuddyCollec
 impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<N, O, B> {
     /// 最大层数。
     const MAX_LAYER: usize = N;
+    /// 寡头支持的最小阶数。
+    const O_MIN_ORDER: usize = O::INTRUSIVE_META_SIZE.next_power_of_two().trailing_zeros() as _;
+    /// 伙伴支持的最小阶数。
+    const B_MIN_ORDER: usize = B::INTRUSIVE_META_SIZE.next_power_of_two().trailing_zeros() as _;
 
     /// 构造分配器。
     #[inline]
@@ -112,8 +113,8 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         self.min_order = min_order;
         let max_order = self.max_order();
 
-        assert!(B::MIN_ORDER <= max_order);
-        assert!(O::MIN_ORDER <= max_order);
+        assert!(Self::O_MIN_ORDER <= max_order);
+        assert!(Self::B_MIN_ORDER <= min_order);
 
         let base = base.as_ptr() as usize;
         self.buddies
@@ -128,6 +129,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     ///
     /// 如果分配成功，返回一个能容纳 `layout` 的 `(指针, 长度)` 二元组。
     pub fn allocate(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), BuddyError> {
+        let max_order = self.max_order();
         #[inline]
         const fn allocated<T>(ptr: *mut T, size: usize) -> (NonNull<u8>, usize) {
             (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
@@ -145,7 +147,6 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         // 对齐的阶数
         let align_order = nonzero(layout.align()).trailing_zeros() as usize;
         // 分配
-        let max_order = self.max_order();
         let (ptr, alloc_size) = if size_order >= max_order {
             // 连续分配寡头
             let count = ((ans_size >> (max_order - 1)) + 1) >> 1;
@@ -191,9 +192,10 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
 
     /// 回收。
     pub fn deallocate(&mut self, ptr: NonNull<u8>, size: usize) {
+        let max_order = self.max_order();
+
         let mut ptr = ptr.as_ptr() as usize;
         let end = ptr + size;
-        let max_order = self.max_order();
         while ptr < end {
             // 剩余长度
             let len = nonzero(end - ptr);
@@ -270,12 +272,12 @@ impl Intrusive {
     }
 
     #[inline]
-    unsafe fn idx_to_ptr(&self, idx: usize) -> NonNull<u8> {
-        NonNull::new_unchecked(((idx + self.base) << self.order) as *mut u8)
+    unsafe fn idx_to_ptr<T>(&self, idx: usize) -> NonNull<T> {
+        NonNull::new_unchecked(((idx + self.base) << self.order) as *mut T)
     }
 
     #[inline]
-    unsafe fn ptr_to_idx(&self, ptr: NonNull<u8>) -> usize {
+    unsafe fn ptr_to_idx<T>(&self, ptr: NonNull<T>) -> usize {
         ((ptr.as_ptr() as usize) >> self.order) - self.base
     }
 }

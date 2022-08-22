@@ -106,7 +106,7 @@ struct Node {
 impl Tree {
     fn insert(&mut self, mut ptr: NonNull<Node>) {
         if let Some(mut root_ptr) = self.0 {
-            // 插入节点
+            // 插入结点
             let root = unsafe { root_ptr.as_mut() };
             if ptr < root_ptr {
                 &mut root.l
@@ -117,7 +117,7 @@ impl Tree {
             root.update();
             self.rotate();
         } else {
-            // 新建节点
+            // 新建结点
             self.0 = Some(ptr);
             *unsafe { ptr.as_mut() } = Node {
                 l: Tree(None),
@@ -129,7 +129,7 @@ impl Tree {
 
     /// 树高。
     ///
-    /// 空树高度为 0；单独的节点高度为 1。
+    /// 空树高度为 0；单独的结点高度为 1。
     #[inline]
     fn height(&self) -> usize {
         self.0.map_or(0, |node| unsafe { node.as_ref() }.h)
@@ -190,10 +190,10 @@ impl Tree {
 }
 
 impl Node {
-    /// 更新节点。
+    /// 更新结点。
     #[inline]
     fn update(&mut self) {
-        // 节点高度比左右子树中高的高 1
+        // 结点高度比左右子树中高的高 1
         self.h = core::cmp::max(self.l.height(), self.r.height()) + 1;
     }
 

@@ -20,8 +20,6 @@ impl<A: BitViewSized> BitArrayBuddy<A> {
 }
 
 impl<A: BitViewSized> BuddyLine for BitArrayBuddy<A> {
-    const MIN_ORDER: usize = 0;
-
     const EMPTY: Self = Self {
         bits: BitArray::ZERO,
         base: 0,

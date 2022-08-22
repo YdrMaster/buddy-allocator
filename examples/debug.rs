@@ -45,11 +45,9 @@ struct BuddySet {
 }
 
 impl BuddyLine for BuddySet {
-    const MIN_ORDER: usize = 0;
-
     const EMPTY: Self = Self {
         set: MaybeUninit::uninit(),
-        order: Self::MIN_ORDER,
+        order: 0,
     };
 
     fn init(&mut self, order: usize, base: usize) {
