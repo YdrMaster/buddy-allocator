@@ -1,10 +1,10 @@
-﻿use crate::{BuddyCollection, BuddyLine, Intrusive};
+﻿use crate::{BuddyCollection, BuddyLine, Order};
 use core::{cmp::Ordering::*, fmt, ptr::NonNull};
 
 /// 侵入式链表伙伴行。
 pub struct LinkedListBuddy {
     free_list: Node,
-    intrusive: Intrusive,
+    order: Order,
 }
 
 impl BuddyLine for LinkedListBuddy {
@@ -12,12 +12,12 @@ impl BuddyLine for LinkedListBuddy {
 
     const EMPTY: Self = Self {
         free_list: Node { next: None },
-        intrusive: Intrusive::ZERO,
+        order: Order::new(0),
     };
 
     #[inline]
     fn init(&mut self, order: usize, _base: usize) {
-        self.intrusive.init(order)
+        self.order = Order::new(order);
     }
 
     fn take(&mut self, _idx: usize) -> bool {
@@ -46,14 +46,14 @@ impl BuddyCollection for LinkedListBuddy {
         } else {
             self.free_list
                 .take_any()
-                .map(|ptr| unsafe { self.intrusive.ptr_to_idx(ptr) })
+                .map(|ptr| self.order.ptr_to_idx(ptr))
         }
     }
 
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 伙伴和当前结点存在链表的同一个位置。
-        let node = unsafe { self.intrusive.idx_to_ptr(idx) };
-        let buddy = unsafe { self.intrusive.idx_to_ptr(idx ^ 1) };
+        let node = unsafe { self.order.idx_to_ptr(idx) };
+        let buddy = unsafe { self.order.idx_to_ptr(idx ^ 1) };
         if self.free_list.insert(node, buddy) {
             None
         } else {
@@ -67,8 +67,8 @@ impl fmt::Debug for LinkedListBuddy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         let mut cursor = &self.free_list;
-        while let Some(mut next) = cursor.next {
-            self.intrusive.ptr_to_idx(next).fmt(f)?;
+        while let Some(next) = cursor.next {
+            self.order.ptr_to_idx(next).fmt(f)?;
             write!(f, ", ")?;
             cursor = unsafe { next.as_ref() };
         }

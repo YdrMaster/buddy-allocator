@@ -2,7 +2,6 @@
 
 #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
-#![allow(unused)]
 
 // TODO
 // mod avl;
@@ -159,27 +158,40 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         self.deallocate(ptr, size)
     }
 
+    /// 分配可容纳 `T` 对象的内存块。
+    pub fn allocate_type<T>(&mut self) -> Result<(NonNull<T>, usize), BuddyError> {
+        #[inline]
+        const fn allocated<T, U>(ptr: *mut T, size: usize) -> (NonNull<U>, usize) {
+            (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
+        }
+
+        let layout = Layout::new::<T>();
+        if let Some(size) = NonZeroUsize::new(layout.size()) {
+            self.allocate(layout.align().trailing_zeros() as _, size)
+        } else {
+            Ok(allocated(self, 0))
+        }
+    }
+
     /// 分配。
     ///
-    /// 如果分配成功，返回一个能容纳 `layout` 的 `(指针, 长度)` 二元组。
-    pub fn allocate<T>(&mut self, layout: Layout) -> Result<(NonNull<T>, usize), BuddyError> {
+    /// 如果分配成功，返回一个 `(指针, 长度)` 二元组。
+    pub fn allocate<T>(
+        &mut self,
+        align_order: usize,
+        size: NonZeroUsize,
+    ) -> Result<(NonNull<T>, usize), BuddyError> {
         let max_order = self.max_order();
         #[inline]
         const fn allocated<T, U>(ptr: *mut T, size: usize) -> (NonNull<U>, usize) {
             (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
         }
 
-        // 支持零长分配
-        if layout.size() == 0 {
-            return Ok(allocated(self, 0));
-        }
         // 要分配的容量
         let page_mask = (1usize << self.min_order) - 1;
-        let ans_size = (layout.size() + page_mask) & !page_mask;
+        let ans_size = (size.get() + page_mask) & !page_mask;
         // 分配的阶数
         let size_order = nonzero(ans_size.next_power_of_two()).trailing_zeros() as usize;
-        // 对齐的阶数
-        let align_order = nonzero(layout.align()).trailing_zeros() as usize;
         // 分配
         let (ptr, alloc_size) = if size_order >= max_order {
             // 连续分配寡头
@@ -214,6 +226,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             // 完成
             (idx << size_order, 1 << size_order)
         };
+        self.free -= alloc_size;
         // 存回为了对齐而多分配的
         if alloc_size > ans_size {
             self.deallocate(
@@ -221,7 +234,6 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                 alloc_size - ans_size,
             );
         }
-        self.free -= ans_size;
         Ok(allocated(ptr as *mut (), ans_size))
     }
 
@@ -299,25 +311,21 @@ const fn nonzero(val: usize) -> NonZeroUsize {
 }
 
 /// 侵入式转换。
-struct Intrusive {
-    order: usize,
-}
+struct Order(usize);
 
-impl Intrusive {
-    const ZERO: Self = Self { order: 0 };
-
+impl Order {
     #[inline]
-    fn init(&mut self, order: usize) {
-        self.order = order;
+    const fn new(order: usize) -> Self {
+        Self(order)
     }
 
     #[inline]
     unsafe fn idx_to_ptr<T>(&self, idx: usize) -> NonNull<T> {
-        NonNull::new_unchecked((idx << self.order) as *mut _)
+        NonNull::new_unchecked((idx << self.0) as *mut _)
     }
 
     #[inline]
     fn ptr_to_idx<T>(&self, ptr: NonNull<T>) -> usize {
-        (ptr.as_ptr() as usize) >> self.order
+        (ptr.as_ptr() as usize) >> self.0
     }
 }

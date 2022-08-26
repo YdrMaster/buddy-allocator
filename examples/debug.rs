@@ -1,24 +1,22 @@
 ﻿use buddy_allocator::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection};
-use std::{alloc::Layout, collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
+use std::{collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {
     let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new();
     allocator.init(12, non_null(0x1000));
     println!();
-    assert!(allocator.allocate(Layout::new::<usize>()).is_err());
+    assert!(allocator.allocate_type::<usize>().is_err());
     println!();
-    allocator.deallocate(non_null(0x1000), 0x7fff_f000);
+    unsafe { allocator.transfer(non_null(0x1000), 0x7fff_f000) };
 
     println!();
-    println!("{allocator:?}");
-    let (ptr0, size0) = allocator.allocate(Layout::new::<[u8; 2048]>()).unwrap();
-    println!("{allocator:?}");
-    let (ptr1, size1) = allocator.allocate(Layout::new::<[u8; 4096]>()).unwrap();
-    println!("{allocator:?}");
-    let (ptr2, size2) = allocator
-        .allocate(Layout::new::<[u8; 4096 * 3 - 1]>())
-        .unwrap();
-    println!("{allocator:?}");
+    println!("A {allocator:?}");
+    let (ptr0, size0) = allocator.allocate_type::<[u8; 2048]>().unwrap();
+    println!("B {allocator:?}");
+    let (ptr1, size1) = allocator.allocate_type::<[u8; 4096]>().unwrap();
+    println!("C {allocator:?}");
+    let (ptr2, size2) = allocator.allocate_type::<[u8; 4096 * 3 - 100]>().unwrap();
+    println!("D {allocator:?}");
 
     assert_eq!(4096, size0);
     assert_eq!(4096, size1);

@@ -14,11 +14,11 @@ impl Page {
     const ZERO: Self = Self([0; 4096]);
 }
 
-/// 8 MiB
-static mut MEMORY: [Page; 2048] = [Page::ZERO; 2048];
+/// 64 MiB
+static mut MEMORY: [Page; 16384] = [Page::ZERO; 16384];
 
 fn main() {
-    let mut allocator = Allocator::<5>::new();
+    let mut allocator = Allocator::<8>::new();
     let ptr = NonNull::new(unsafe { MEMORY.as_mut_ptr() }).unwrap();
     let len = core::mem::size_of_val(unsafe { &MEMORY });
     allocator.init(12, ptr);
@@ -40,16 +40,20 @@ BEFORE
 {allocator:#x?}"
     );
 
-    let mut blocks = [null_mut::<Page>(); 1024];
+    let mut blocks = [null_mut::<Page>(); 10000];
     let layout = Layout::new::<Page>();
     let t = Instant::now();
     for block in blocks.iter_mut() {
-        let (ptr, size) = allocator.allocate(layout).unwrap();
+        let (ptr, size) = allocator.allocate_type::<Page>().unwrap();
         debug_assert_eq!(layout.size(), size);
         *block = ptr.as_ptr();
     }
     let t = t.elapsed();
-    println!("allocate   {t:?} ({} times)", blocks.len());
+    println!(
+        "allocate   {:?} ({} times)",
+        t / blocks.len() as u32,
+        blocks.len()
+    );
 
     assert_eq!(len, allocator.capacity());
     assert_eq!(len - blocks.len() * layout.size(), allocator.free());
@@ -60,7 +64,11 @@ BEFORE
         *block = null_mut();
     }
     let t = t.elapsed();
-    println!("deallocate {t:?} ({} times)", blocks.len());
+    println!(
+        "deallocate {:?} ({} times)",
+        t / blocks.len() as u32,
+        blocks.len()
+    );
 
     assert_eq!(len, allocator.capacity());
     assert_eq!(len, allocator.free());

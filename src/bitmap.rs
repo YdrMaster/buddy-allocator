@@ -30,7 +30,7 @@ impl BuddyLine for UsizeBuddy {
     const EMPTY: Self = Self { bits: 0, base: 0 };
 
     #[inline]
-    fn init(&mut self, order: usize, base: usize) {
+    fn init(&mut self, _order: usize, base: usize) {
         self.base = base;
     }
 
