@@ -31,7 +31,6 @@ impl BuddyLine for LinkedListBuddy {
 //     fn take_any(&mut self, _align_order: usize, _count: usize) -> Option<usize> {
 //         todo!()
 //     }
-
 //     fn put(&mut self, _idx: usize) {
 //         todo!()
 //     }

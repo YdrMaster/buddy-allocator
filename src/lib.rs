@@ -310,7 +310,9 @@ const fn nonzero(val: usize) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(val) }
 }
 
-/// 侵入式转换。
+/// 阶数。
+///
+/// 用于侵入式行序号到指针的转换。
 struct Order(usize);
 
 impl Order {
