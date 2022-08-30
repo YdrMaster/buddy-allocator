@@ -159,13 +159,22 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     }
 
     /// 分配可容纳 `T` 对象的内存块。
+    #[inline]
     pub fn allocate_type<T>(&mut self) -> Result<(NonNull<T>, usize), BuddyError> {
+        self.allocate_layout(Layout::new::<T>())
+    }
+
+    /// 分配符合 `layout` 布局的内存块。
+    #[inline]
+    pub fn allocate_layout<T>(
+        &mut self,
+        layout: Layout,
+    ) -> Result<(NonNull<T>, usize), BuddyError> {
         #[inline]
         const fn allocated<T, U>(ptr: *mut T, size: usize) -> (NonNull<U>, usize) {
             (unsafe { NonNull::new_unchecked(ptr) }.cast(), size)
         }
 
-        let layout = Layout::new::<T>();
         if let Some(size) = NonZeroUsize::new(layout.size()) {
             self.allocate(layout.align().trailing_zeros() as _, size)
         } else {

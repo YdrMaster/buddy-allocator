@@ -1,5 +1,5 @@
-﻿use crate::{BuddyCollection, BuddyLine, Order};
-use core::{cmp::Ordering::*, fmt, ptr::NonNull};
+﻿use crate::{BuddyCollection, BuddyLine, OligarchyCollection, Order};
+use core::{fmt, ptr::NonNull};
 
 /// 侵入式链表伙伴行。
 pub struct LinkedListBuddy {
@@ -26,15 +26,25 @@ impl BuddyLine for LinkedListBuddy {
     }
 }
 
-// TODO 可以实现，但没有效率
-// impl OligarchyCollection for LinkedListBuddy {
-//     fn take_any(&mut self, _align_order: usize, _count: usize) -> Option<usize> {
-//         todo!()
-//     }
-//     fn put(&mut self, _idx: usize) {
-//         todo!()
-//     }
-// }
+impl OligarchyCollection for LinkedListBuddy {
+    #[inline]
+    fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize> {
+        if count > 1 || align_order > 0 {
+            // TODO 不支持
+            None
+        } else {
+            self.free_list
+                .take_any()
+                .map(|ptr| self.order.ptr_to_idx(ptr))
+        }
+    }
+
+    #[inline]
+    fn put(&mut self, idx: usize) {
+        self.free_list
+            .insert_unordered(unsafe { self.order.idx_to_ptr(idx) });
+    }
+}
 
 impl BuddyCollection for LinkedListBuddy {
     #[inline]
@@ -92,6 +102,7 @@ impl Node {
         let mut cursor = self;
         loop {
             if let Some(mut next) = cursor.next {
+                use core::cmp::Ordering::*;
                 match next.cmp(&buddy) {
                     // 新结点更大，找下一个
                     Less => cursor = unsafe { next.as_mut() },
@@ -117,13 +128,17 @@ impl Node {
         }
     }
 
+    /// 直接在头结点插入。
+    #[inline]
+    fn insert_unordered(&mut self, mut node: NonNull<Node>) {
+        unsafe { node.as_mut() }.next = core::mem::replace(&mut self.next, Some(node));
+    }
+
     /// 直接取下头结点。
     #[inline]
     fn take_any(&mut self) -> Option<NonNull<Node>> {
-        let root = self.next.take();
-        if let Some(root) = root {
-            self.next = unsafe { root.as_ref().next };
-        }
+        let root = self.next;
+        self.next = root.and_then(|node| unsafe { node.as_ref().next });
         root
     }
 }
