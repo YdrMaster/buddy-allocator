@@ -228,10 +228,10 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
                 }
             };
             // 存回多借用的
-            for layer in (layer0..layer).rev() {
+            assert!(self.buddies[layer0..layer].iter_mut().rev().all(|b| {
                 idx <<= 1;
-                assert!(self.buddies[layer].put(idx + 1).is_none());
-            }
+                b.put(idx + 1).is_none()
+            }));
             // 完成
             (idx << size_order, 1 << size_order)
         };
