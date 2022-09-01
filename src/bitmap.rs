@@ -60,7 +60,7 @@ impl OligarchyCollection for UsizeBuddy {
             }
             // 尝试占用
             if slice & mask == mask {
-                self.bits |= mask << skip;
+                self.bits &= !(mask << skip);
                 return Some(self.base + skip);
             }
             // 跳过失败范围
@@ -91,7 +91,6 @@ impl BuddyCollection for UsizeBuddy {
             if slice == 0 {
                 break;
             }
-            // 对齐（bitvec 的 leading 是低位）
             skip += (slice.trailing_zeros() as usize + align) & !align;
             // 分配失败
             if skip >= Self::SIZE {

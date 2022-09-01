@@ -77,8 +77,7 @@ impl fmt::Debug for LinkedListBuddy {
         write!(f, "[")?;
         let mut cursor = &self.free_list;
         while let Some(next) = cursor.next {
-            self.order.ptr_to_idx(next).fmt(f)?;
-            write!(f, ", ")?;
+            write!(f, "{:#x}, ", self.order.ptr_to_idx(next))?;
             cursor = unsafe { next.as_ref() };
         }
         write!(f, "]")

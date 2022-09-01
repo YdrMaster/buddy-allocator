@@ -15,10 +15,10 @@ impl Page {
 }
 
 /// 64 MiB
-static mut MEMORY: [Page; 16384] = [Page::ZERO; 16384];
+static mut MEMORY: [Page; 65536] = [Page::ZERO; 65536];
 
 fn main() {
-    let mut allocator = Allocator::<8>::new();
+    let mut allocator = Allocator::<12>::new();
     let ptr = NonNull::new(unsafe { MEMORY.as_mut_ptr() }).unwrap();
     let len = core::mem::size_of_val(unsafe { &MEMORY });
     allocator.init(12, ptr);
@@ -40,7 +40,7 @@ BEFORE
 {allocator:#x?}"
     );
 
-    let mut blocks = [null_mut::<Page>(); 10000];
+    let mut blocks = [null_mut::<Page>(); 30000];
     let layout = Layout::new::<Page>();
     let t = Instant::now();
     for block in blocks.iter_mut() {
