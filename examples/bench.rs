@@ -40,7 +40,7 @@ BEFORE
 {allocator:#x?}"
     );
 
-    let mut blocks = [null_mut::<Page>(); 30000];
+    let mut blocks = [null_mut::<Page>(); 65536];
     let layout = Layout::new::<Page>();
     let t = Instant::now();
     for block in blocks.iter_mut() {
@@ -48,11 +48,12 @@ BEFORE
         debug_assert_eq!(layout.size(), size);
         *block = ptr.as_ptr();
     }
-    let t = t.elapsed();
+    let ta = t.elapsed();
+
     println!(
-        "allocate   {:?} ({} times)",
-        t / blocks.len() as u32,
-        blocks.len()
+        "
+EMPTY
+{allocator:#x?}"
     );
 
     assert_eq!(len, allocator.capacity());
@@ -63,12 +64,7 @@ BEFORE
         allocator.deallocate(NonNull::new(*block).unwrap(), layout.size());
         *block = null_mut();
     }
-    let t = t.elapsed();
-    println!(
-        "deallocate {:?} ({} times)",
-        t / blocks.len() as u32,
-        blocks.len()
-    );
+    let td = t.elapsed();
 
     assert_eq!(len, allocator.capacity());
     assert_eq!(len, allocator.free());
@@ -77,5 +73,16 @@ BEFORE
         "
 AFTER
 {allocator:#x?}"
+    );
+
+    println!(
+        "allocate   {:?} ({} times)",
+        ta / blocks.len() as u32,
+        blocks.len()
+    );
+    println!(
+        "deallocate {:?} ({} times)",
+        td / blocks.len() as u32,
+        blocks.len()
     );
 }

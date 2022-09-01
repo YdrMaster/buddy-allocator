@@ -14,15 +14,11 @@ impl UsizeBuddy {
     const SIZE: usize = usize::BITS as usize;
 
     #[inline]
-    fn swap(&mut self, idx: usize, val: bool) -> bool {
+    fn take(&mut self, idx: usize) -> bool {
         let bit = 1usize << idx;
-        let ans = self.bits & bit == bit;
-        if val {
-            self.bits |= bit;
-        } else {
-            self.bits &= !bit;
-        }
-        ans
+        let bits = self.bits;
+        self.bits &= !bit;
+        bits & bit == bit
     }
 }
 
@@ -36,72 +32,51 @@ impl BuddyLine for UsizeBuddy {
 
     #[inline]
     fn take(&mut self, idx: usize) -> bool {
-        let idx = idx - self.base;
-        debug_assert!(idx < Self::SIZE, "index out of bound");
-        self.swap(idx, false)
+        self.take(idx - self.base)
     }
 }
 
 impl OligarchyCollection for UsizeBuddy {
+    #[inline]
     fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize> {
-        let align = (1usize << align_order) - 1;
-        let mask = (1 << count) - 1;
-        let mut skip = 0;
+        let count = (1 << count) - 1;
+        let align = 1usize << align_order;
+        let mut i = 0;
         loop {
-            // 去掉已检查的部分
-            let slice = self.bits >> skip;
-            if slice == 0 {
-                break;
+            let mask = count << i;
+            if self.bits & mask == mask {
+                self.bits &= !mask;
+                return Some(self.base + i);
             }
-            // 跳过 0
-            skip += (slice.trailing_zeros() as usize + align) & !align;
-            if skip + count > Self::SIZE {
-                break;
-            }
-            // 尝试占用
-            if slice & mask == mask {
-                self.bits &= !(mask << skip);
-                return Some(self.base + skip);
-            }
-            // 跳过失败范围
-            skip += (count + align) & !align;
-            if skip + count > Self::SIZE {
-                break;
+            i += align;
+            if i >= usize::BITS as usize {
+                return None;
             }
         }
-        None
     }
 
     #[inline]
     fn put(&mut self, idx: usize) {
-        let idx = idx - self.base;
-        debug_assert!(idx < Self::SIZE, "index out of bound");
-        self.swap(idx, true);
+        self.bits |= 1 << (idx - self.base);
     }
 }
 
 impl BuddyCollection for UsizeBuddy {
     #[inline]
     fn take_any(&mut self, align_order: usize) -> Option<usize> {
-        let align = (1usize << align_order) - 1;
-        let mut skip = 0;
+        let align = 1usize << align_order;
+        let mut i = 0;
         loop {
-            // 去掉已检查的部分
-            let slice = self.bits >> skip;
-            if slice == 0 {
-                break;
+            let mask = 1 << i;
+            if self.bits & mask == mask {
+                self.bits &= !mask;
+                return Some(self.base + i);
             }
-            skip += (slice.trailing_zeros() as usize + align) & !align;
-            // 分配失败
-            if skip >= Self::SIZE {
-                break;
-            }
-            // 尝试占用
-            if self.swap(skip, false) {
-                return Some(self.base + skip);
+            i += align;
+            if i >= usize::BITS as usize {
+                return None;
             }
         }
-        None
     }
 
     #[inline]
@@ -109,10 +84,10 @@ impl BuddyCollection for UsizeBuddy {
         let idx = idx - self.base;
         debug_assert!(idx < Self::SIZE, "index out of bound");
         let buddy = idx ^ 1;
-        if self.swap(buddy, false) {
+        if self.take(buddy) {
             Some(idx << 1)
         } else {
-            self.swap(idx, true);
+            self.bits |= 1 << idx;
             None
         }
     }
