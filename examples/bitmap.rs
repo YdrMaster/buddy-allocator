@@ -1,4 +1,4 @@
-﻿use buddy_allocator::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
+﻿use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
 use std::ptr::NonNull;
 
 type Allocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, LinkedListBuddy>;
@@ -19,7 +19,7 @@ fn main() {
     allocator.init(3, ptr);
     unsafe { allocator.transfer(ptr, len) };
     println!("{allocator:?}");
-    let (_0, size) = allocator.allocate_type::<usize>().unwrap();
+    let (_, size) = allocator.allocate_type::<usize>().unwrap();
     assert_eq!(size, 8);
     println!("{allocator:?}");
 }

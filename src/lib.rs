@@ -3,8 +3,7 @@
 #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 
-// TODO
-// mod avl;
+// TODO mod avl;
 mod bitmap;
 mod linked_list;
 
@@ -156,6 +155,20 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
     pub unsafe fn transfer<T>(&mut self, ptr: NonNull<T>, size: usize) {
         self.capacity += size;
         self.deallocate(ptr, size)
+    }
+
+    /// 从分配器夺走一个对齐到 `align_order` 阶，长度为 `size` 的内存块。
+    #[inline]
+    pub fn snatch<T>(
+        &mut self,
+        align_order: usize,
+        size: NonZeroUsize,
+    ) -> Result<(NonNull<T>, usize), BuddyError> {
+        let ans = self.allocate(align_order, size);
+        if let Ok((_, size)) = ans {
+            self.capacity -= size;
+        }
+        ans
     }
 
     /// 分配可容纳 `T` 对象的内存块。

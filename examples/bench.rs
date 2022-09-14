@@ -1,4 +1,4 @@
-﻿use buddy_allocator::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
+﻿use customizable_buddy::{BuddyAllocator, BuddyError, LinkedListBuddy, UsizeBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},
@@ -14,10 +14,10 @@ impl Page {
     const ZERO: Self = Self([0; 4096]);
 }
 
-/// 64 MiB
+/// 256 MiB
 static mut MEMORY: [Page; 65536] = [Page::ZERO; 65536];
 
-fn main() {
+fn main() -> Result<(), BuddyError> {
     let mut allocator = Allocator::<12>::new();
     let ptr = NonNull::new(unsafe { MEMORY.as_mut_ptr() }).unwrap();
     let len = core::mem::size_of_val(unsafe { &MEMORY });
@@ -44,7 +44,7 @@ BEFORE
     let layout = Layout::new::<Page>();
     let t = Instant::now();
     for block in blocks.iter_mut() {
-        let (ptr, size) = allocator.allocate_type::<Page>().unwrap();
+        let (ptr, size) = allocator.allocate_type::<Page>()?;
         debug_assert_eq!(layout.size(), size);
         *block = ptr.as_ptr();
     }
@@ -85,4 +85,6 @@ AFTER
         td / blocks.len() as u32,
         blocks.len()
     );
+
+    Ok(())
 }
