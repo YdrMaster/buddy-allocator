@@ -259,8 +259,30 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         Ok(allocated(ptr as *mut (), ans_size))
     }
 
+    /// 根据布局回收。
+    ///
+    /// # Safety
+    ///
+    /// 这个方法认为 `ptr` 是根据 `layout` 分配出来的，
+    /// 因此长度不小于 `layout.size()` 并且对齐到 `self.min_order`。
+    pub unsafe fn deallocate_layout<T>(&mut self, ptr: NonNull<T>, layout: Layout) {
+        debug_assert!((1 << (ptr.as_ptr() as usize).trailing_zeros()) >= layout.align());
+
+        let mask = (1 << self.min_order) - 1;
+        self.deallocate(ptr, (layout.size() + mask) & !mask)
+    }
+
     /// 回收。
+    ///
+    /// # Notice
+    ///
+    /// 调用者需要保证 `size` 对齐了分配器的最小阶数。
     pub fn deallocate<T>(&mut self, ptr: NonNull<T>, size: usize) {
+        debug_assert!(
+            size.trailing_zeros() as usize >= self.min_order,
+            "size must align to minium order"
+        );
+
         let max_order = self.max_order();
 
         let mut ptr = ptr.as_ptr() as usize;
