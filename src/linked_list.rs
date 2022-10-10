@@ -7,6 +7,9 @@ pub struct LinkedListBuddy {
     order: Order,
 }
 
+/// 必须实现 [`Send`] 才能加锁。
+unsafe impl Send for LinkedListBuddy {}
+
 impl BuddyLine for LinkedListBuddy {
     const INTRUSIVE_META_SIZE: usize = core::mem::size_of::<Node>();
 
