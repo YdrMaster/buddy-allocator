@@ -1,7 +1,7 @@
 [package]
 name = "customizable-buddy"
 description = "A new buddy allocator that allows custom buddy finding algorithm"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
 repository = "https://github.com/YdrMaster/buddy-allocator.git"
