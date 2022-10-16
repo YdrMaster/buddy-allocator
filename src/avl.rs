@@ -69,6 +69,7 @@ impl BuddyLine for AvlBuddy {
 impl OligarchyCollection for AvlBuddy {
     fn take_any(&mut self, _align_order: usize, _count: usize) -> Option<usize> {
         todo!()
+        // 个人感觉基于寡头行的数量而言，实现这个地方没有什么效率
     }
 
     #[inline]
@@ -106,11 +107,14 @@ struct Node {
 impl Tree {
     fn insert(&mut self, mut ptr: NonNull<Node>) {
         if let Some(mut root_ptr) = self.0 {
+            println!("A");
             // 插入结点
             let root = unsafe { root_ptr.as_mut() };
             if ptr < root_ptr {
+                println!("left");
                 &mut root.l
             } else {
+                println!("right");
                 &mut root.r
             }
             .insert(ptr);
@@ -118,12 +122,42 @@ impl Tree {
             self.rotate();
         } else {
             // 新建结点
+            println!("create a new node");
             self.0 = Some(ptr);
             *unsafe { ptr.as_mut() } = Node {
                 l: Tree(None),
                 r: Tree(None),
                 h: 1,
             };
+        }
+    }
+    
+    /// 从地址池中获取一个单位的地址, 并且返回这个地址
+    #[allow(dead_code, unused_variables)]
+    fn delete(&mut self) {
+        /* 
+        根据需求，此处需要实现的子模块包括，通过 左右子树中的最小高度导航到 到最近的叶子结点，然后再进行 删除节点操作
+        删除节点操作的时候，由于当前操作在叶子节点处产生，因此不需要考虑额外信息，直接将其删除即可
+        */
+        if let Some(root_ptr) = self.0 {
+            // let root = unsafe { root_ptr.as_mut() };
+
+            // if root.h == 1 {
+            //     &mut root
+            // }
+            // else if root.l.h == 1 {
+            //     &mut root.l
+            // }
+            // else if root.r.h == 1 {
+            //     &mut root.r
+            // } 
+            // else {
+
+            // }
+            // // finding a leaf node
+        }
+        else {
+            // panic BC couldn't alloc 
         }
     }
 
@@ -201,5 +235,167 @@ impl Node {
     #[inline]
     fn bf(&self) -> isize {
         self.l.height() as isize - self.r.height() as isize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use super::*;
+    const LIST_NUM: usize = 3;
+
+    impl Node {
+        fn new() -> Self {
+            Self {
+                l: Tree(None), 
+                r: Tree(None),
+                h:1, 
+            }
+        }
+    }
+
+    impl Tree {
+        // fn preorder_traversal(&self) -> Vec<usize> {
+        //     let mut ret = Vec::new();
+        //     ret.push(self.0.unwrap().as_ptr() as usize);
+        //     if let Some(root_ptr) = self.0 {
+        //         let root = unsafe { root_ptr.as_ref() };
+        //         match &root.l {
+        //             Tree(None) => (),
+        //             tree => ret.append(&mut tree.preorder_traversal()),
+        //         }
+        //         match &root.r {
+        //             Tree(None) => (),
+        //             tree => ret.append(&mut tree.preorder_traversal()),
+        //         }
+        //     }
+        //     else {
+        //         println!("failure");
+        //     }
+        //     return ret;
+        // }
+        
+        fn insert_from_list(&mut self, list:[NonNull<Node>; LIST_NUM]) {
+            for item in 0..list.len() {
+                self.insert(list[item]);
+            }
+        }
+
+        fn level_traversal(&self, list: [NonNull<Node>; LIST_NUM]) -> Vec<VecDeque<usize>> {
+            let mut res:Vec<VecDeque<usize>> = Vec::new();
+            let mut queue:Vec<&Tree> = Vec::new();
+
+            match self.0 {
+                None => return res,
+                Some(_) => queue.push(self),
+            }
+
+            while !queue.is_empty() {
+                let node_size = queue.len();
+                let mut this_line = VecDeque::new();
+
+                for _ in 0..node_size {
+                    let tree = queue.pop().expect("msg 1");
+                    println!("{:?}", mapping_addr_and_number(list, &tree));
+                    // this_line.push_back(tree.0.expect("msg 5").as_ptr() as usize);
+
+                    // let a = list.iter().enumerate().filter(|(v, node)| {
+                    //     node.as_ptr() as usize == tree.0.expect("msg 6").as_ptr() as usize 
+                    // });
+                    this_line.push_back(mapping_addr_and_number(list, tree));
+
+                    unsafe {
+                        match tree.0.expect("msg 2").as_ref().l {
+                            Tree(None) => (),
+                            ref tree => queue.push(tree),
+                        }       
+                        match tree.0.expect("msg 3").as_ref().r {
+                            Tree(None) => (),
+                            ref tree => queue.push(tree),
+                        }       
+                    }
+                }
+                res.push(this_line);
+            }
+
+            res
+
+            // let ret = Vec::new();
+            // let queue = Vec::new();
+            // if let Some(node) = self.0 {
+            //     queue.push(self);
+            //     let split = Tree::new();
+            //     split.h = 0;
+            //     queue.push(split);
+            // }
+            // while let Some(node) = queue.pop() {
+            //     let node = node.0 {
+            //         Some(node) => node,
+            //     }
+            //     // let node = unsafe { node.0.unwrap().as_ref() };
+            //     if node.h == 0 {
+            //         ret.push(queue);
+            //         queue.clear();
+            //     }
+            // }
+        }
+    }
+
+    // 让序号更加直观
+    fn mapping_addr_and_number(list: [NonNull<Node> ; LIST_NUM], addr: &Tree) -> usize {
+        let ptr_for_node = addr.0.expect("msg 6").as_ptr() as usize;
+        for i in 0..list.len() {
+            if ptr_for_node == list[i].as_ptr() as usize {
+                return i + 1;
+            }
+        }
+        100 
+    }
+    // #[allow(dead_code)]
+    // fn print_vec(out: Vec<usize>, list: [NonNull<Node>; LIST_NUM]) {
+    //     for i in 0..out.len() {
+    //         println!("===");
+    //         println!("{}", out[i]);
+    //         list.iter().enumerate().for_each(|(v, ptr)| {
+    //             println!("{}", ptr.as_ptr() as usize);
+    //             if ptr.as_ptr() as usize == out[i] {
+    //                 print!("{}  ", v);
+    //             };
+    //         });
+    //     }
+    // }
+
+    #[test]
+    fn test_for_insert_lr() {
+        let mut a = Node::new();
+        let mut b = Node::new();
+        let mut c = Node::new();
+        // let mut d = Node::new();
+        // let mut e = Node::new();
+        // let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) };
+        let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) };
+        let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) };
+        // let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) };
+        // let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) };
+        // let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        println!("ptr1  {:p}", ptr1);
+        println!("ptr2  {:p}", ptr2);
+        println!("ptr3  {:p}", ptr3);
+        // println!("ptr4  {:p}", ptr4);
+        // println!("ptr5  {:p}", ptr5);
+        // println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        // let list = [ptr3, ptr1, ptr2, ptr6, ptr4, ptr5];
+        let list = [ptr3, ptr1, ptr2];
+        tree.insert_from_list(list);
+        
+        println!("================================================================");
+        let level_vec = tree.level_traversal(list);
+        println!("{:?}", level_vec);
+        
+
     }
 }
