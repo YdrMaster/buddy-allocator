@@ -23,6 +23,7 @@ impl UsizeBuddy {
 }
 
 impl BuddyLine for UsizeBuddy {
+    const MIN_ORDER: usize = 0;
     const EMPTY: Self = Self { bits: 0, base: 0 };
 
     #[inline]
@@ -67,8 +68,9 @@ impl BuddyCollection for UsizeBuddy {
         let align = 1usize << align_order;
         let mut i = 0;
         loop {
-            let mask = 1 << i;
+            let mask = 1 << i;          
             if self.bits & mask == mask {
+                // 
                 self.bits &= !mask;
                 return Some(self.base + i);
             }
