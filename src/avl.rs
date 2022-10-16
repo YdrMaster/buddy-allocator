@@ -139,22 +139,16 @@ impl Tree {
         根据需求，此处需要实现的子模块包括，通过 左右子树中的最小高度导航到 到最近的叶子结点，然后再进行 删除节点操作
         删除节点操作的时候，由于当前操作在叶子节点处产生，因此不需要考虑额外信息，直接将其删除即可
         */
-        if let Some(root_ptr) = self.0 {
-            // let root = unsafe { root_ptr.as_mut() };
-
-            // if root.h == 1 {
-            //     &mut root
-            // }
-            // else if root.l.h == 1 {
-            //     &mut root.l
-            // }
-            // else if root.r.h == 1 {
-            //     &mut root.r
-            // } 
-            // else {
-
-            // }
-            // // finding a leaf node
+        if let Some(mut root_ptr) = self.0 {
+            // find the Minimum height subtree
+            let root = unsafe { root_ptr.as_mut() };
+            match (&root.l.0, &root.r.0) {
+                (Some(_), Some(_)) => (),
+                (Some(_), None) => (),
+                (None, Some(_)) => (),
+                (None, None) => (),
+            }
+            
         }
         else {
             // panic BC couldn't alloc 
@@ -436,6 +430,31 @@ mod tests {
         assert_eq!(mapping_addr_and_number(list, &tree), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
+    }
+
+    #[test]
+    fn test_for_delete_l() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
+
+        let insertion_sequence = Vec::from([ptr2, ptr1, ptr3, ptr4]);
+        tree.insert_from_list(insertion_sequence);
+
+        print_level_traversal(&tree, list);
+        print_pre_inorder_traversal(&tree, list);
+
+        tree.delete();
+
+        print_level_traversal(&tree, list);
+        print_pre_inorder_traversal(&tree, list);
+        
+        assert_eq!(mapping_addr_and_number(list, &tree), 3);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 2);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 4);
     }
 
     #[allow(dead_code)]
