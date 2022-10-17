@@ -107,14 +107,11 @@ struct Node {
 impl Tree {
     fn insert(&mut self, mut ptr: NonNull<Node>) {
         if let Some(mut root_ptr) = self.0 {
-            println!("A");
             // 插入结点
             let root = unsafe { root_ptr.as_mut() };
             if ptr < root_ptr {
-                println!("left");
                 &mut root.l
             } else {
-                println!("right");
                 &mut root.r
             }
             .insert(ptr);
@@ -140,15 +137,58 @@ impl Tree {
         删除节点操作的时候，由于当前操作在叶子节点处产生，因此不需要考虑额外信息，直接将其删除即可
         */
         if let Some(mut root_ptr) = self.0 {
-            // find the Minimum height subtree
-            let root = unsafe { root_ptr.as_mut() };
-            match (&root.l.0, &root.r.0) {
-                (Some(_), Some(_)) => (),
-                (Some(_), None) => (),
-                (None, Some(_)) => (),
-                (None, None) => (),
-            }
+            let root = unsafe { root_ptr.as_mut()};
             
+            // TODO: 明显具有较大改进空间，当前主要是因为对于一些特性了解不够深入因此没有进行完全优化
+            if root.l.0.is_none() {
+                if root.r.0.is_none() {
+                    // is leaf node which will only occur when we want to delete root node
+                    self.0 = None;
+                    return;                                                                 // must return otherwise will error BC rotate
+                }
+                else {
+                    // left subtree not exist and right subtree exist => continue if right subtree height wasn't 1
+                    if root.r.height() != 1 {
+                        root.r.delete();
+                    }
+                    else {
+                        root.r = Tree(None);
+                    }
+                }
+            } 
+            else if root.r.0.is_none() {
+                // the situation where left and right subtrees is None should not happen here
+                if root.l.height() != 1 {
+                    root.l.delete();
+                } 
+                else {
+                    root.l = Tree(None);
+                }
+            }
+            else {
+                // if not both left and right subtrees then pick a min one
+                // 开始的时候有打算采用 match + core::cmp 的方式自动识别出来对应的情况，但是后面考虑到清除连接的需要，因此没有采用这种方式，只是通过简单的 if 嵌套来实现了对应的功能
+            
+                if root.l.height() < root.r.height() {
+                    if root.l.height() == 1 {
+                        // delete node
+                        root.l = Tree(None);
+                    }
+                    else {
+                        root.l.delete();
+                    }
+                }
+                else {
+                    if root.r.height() == 1 {
+                        root.r = Tree(None);
+                    }
+                    else {
+                        root.l.delete();
+                    }
+                }
+            }
+            root.update();
+            self.rotate();
         }
         else {
             // panic BC couldn't alloc 
@@ -215,6 +255,7 @@ impl Tree {
         a.update();
         b.update();
     }
+
 }
 
 impl Node {
@@ -232,6 +273,7 @@ impl Node {
     }
 }
 
+#[allow(unused_variables)]
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
@@ -342,7 +384,7 @@ mod tests {
     fn test_for_insert_l() { 
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
 
         let mut tree = Tree(None);
         let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
@@ -355,7 +397,7 @@ mod tests {
         // print_pre_inorder_traversal(&tree, list); 
         let level_vec = tree.level_traversal(list);
         assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        println!("{:?}", level_vec);
+        // println!("{:?}", level_vec);
         assert_eq!(mapping_addr_and_number(list, &tree), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
@@ -365,7 +407,7 @@ mod tests {
     fn test_for_insert_rl() { 
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
 
         let mut tree = Tree(None);
         let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
@@ -378,7 +420,7 @@ mod tests {
         // print_pre_inorder_traversal(&tree, list); 
         let level_vec = tree.level_traversal(list);
         assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        println!("{:?}", level_vec);
+        // println!("{:?}", level_vec);
         assert_eq!(mapping_addr_and_number(list, &tree), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
@@ -388,7 +430,7 @@ mod tests {
     fn test_for_insert_r() { 
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
 
         let mut tree = Tree(None);
         let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
@@ -401,7 +443,7 @@ mod tests {
         // print_pre_inorder_traversal(&tree, list); 
         let level_vec = tree.level_traversal(list);
         assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        println!("{:?}", level_vec);
+        // println!("{:?}", level_vec);
 
         assert_eq!(mapping_addr_and_number(list, &tree), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
@@ -412,7 +454,7 @@ mod tests {
     fn test_for_insert_lr() { 
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
 
         let mut tree = Tree(None);
         let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
@@ -425,7 +467,7 @@ mod tests {
         // print_pre_inorder_traversal(&tree, list); 
         let level_vec = tree.level_traversal(list);
         assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        println!("{:?}", level_vec);
+        // println!("{:?}", level_vec);
 
         assert_eq!(mapping_addr_and_number(list, &tree), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
@@ -436,7 +478,7 @@ mod tests {
     fn test_for_delete_l() {
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
 
         let mut tree = Tree(None);
         let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
@@ -444,19 +486,124 @@ mod tests {
         let insertion_sequence = Vec::from([ptr2, ptr1, ptr3, ptr4]);
         tree.insert_from_list(insertion_sequence);
 
-        print_level_traversal(&tree, list);
-        print_pre_inorder_traversal(&tree, list);
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
 
         tree.delete();
 
-        print_level_traversal(&tree, list);
-        print_pre_inorder_traversal(&tree, list);
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
         
         assert_eq!(mapping_addr_and_number(list, &tree), 3);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 2);
         assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 4);
     }
 
+    #[test]
+    #[allow(unused_variables)]
+    fn test_for_delete_r() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
+
+        let insertion_sequence = Vec::from([ptr3, ptr4, ptr2, ptr1]);
+        tree.insert_from_list(insertion_sequence);
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+
+        tree.delete();
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+        
+        assert_eq!(mapping_addr_and_number(list, &tree), 2);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
+    }
+
+    #[test]
+    #[allow(unused_variables)]
+    fn test_for_delete_lr() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
+
+        let insertion_sequence = Vec::from([ptr3, ptr4, ptr1, ptr2]);
+        tree.insert_from_list(insertion_sequence);
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+
+        tree.delete();
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+        
+        assert_eq!(mapping_addr_and_number(list, &tree), 2);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
+    }
+
+    #[test]
+    #[allow(unused_variables)]
+    fn test_for_delete_rl() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
+
+        let insertion_sequence = Vec::from([ptr2, ptr1, ptr4, ptr3]);
+        tree.insert_from_list(insertion_sequence);
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+
+        tree.delete();
+
+        // print_level_traversal(&tree, list);
+        // print_pre_inorder_traversal(&tree, list);
+        
+        assert_eq!(mapping_addr_and_number(list, &tree), 3);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 2);
+        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 4);
+    }
+
+    #[test] 
+    fn test_for_delete_root() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
+
+        let mut tree = Tree(None);
+        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
+
+        let insertion_sequence = Vec::from([ptr2, ptr1, ptr4, ptr3]);
+        tree.insert_from_list(insertion_sequence);
+
+        tree.delete();
+        tree.delete();
+
+        assert_eq!(tree.preorder_traversal_seq().len(), 2);
+    
+        // print_level_traversal(&tree, list);
+        tree.delete();
+
+        assert_eq!(tree.preorder_traversal_seq().len(), 1);
+        // print_level_traversal(&tree, list);
+
+        tree.delete();
+
+        assert_eq!(tree.0, Tree(None).0);
+    }
     #[allow(dead_code)]
     fn print_level_traversal(tree: &Tree, list: [NonNull<Node>; LIST_NUM]) {
         println!("================================================================");
@@ -469,7 +616,6 @@ mod tests {
         println!("================================================================");
         let pre_vec = tree.preorder_traversal_seq();
         print_vec(pre_vec, list);
-
     }
 
     #[allow(dead_code)]
@@ -498,6 +644,20 @@ mod tests {
         100 
     }
 
-    
+    #[test]
+    #[allow(unused_variables)]
+    fn test_if_cmp_could_using_to_compare_two_nonnull() {
+        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
+        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+
+        let a = core::cmp::min(ptr1, ptr2);
+        let b = core::cmp::min(ptr3, ptr2);
+        // println!("{ptr1:?}, {ptr2:?}");
+        // println!("{ptr3:?}, {ptr2:?}");
+        // println!("{:?}", a);
+        // println!("{:?}", b);
+        assert_eq!(a, ptr1);
+        assert_eq!(b, ptr2);
+    }    
 
 }
