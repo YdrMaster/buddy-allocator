@@ -119,7 +119,6 @@ impl Tree {
             self.rotate();
         } else {
             // 新建结点
-            println!("create a new node");
             self.0 = Some(ptr);
             *unsafe { ptr.as_mut() } = Node {
                 l: Tree(None),
@@ -130,68 +129,65 @@ impl Tree {
     }
     
     /// 从地址池中获取一个单位的地址, 并且返回这个地址
-    #[allow(dead_code, unused_variables)]
-    fn delete(&mut self) {
+    #[allow(dead_code, unused_variables,unused_mut)]
+    fn delete(&mut self) -> Option<usize>{
         /* 
         根据需求，此处需要实现的子模块包括，通过 左右子树中的最小高度导航到 到最近的叶子结点，然后再进行 删除节点操作
         删除节点操作的时候，由于当前操作在叶子节点处产生，因此不需要考虑额外信息，直接将其删除即可
         */
-        if let Some(mut root_ptr) = self.0 {
-            let root = unsafe { root_ptr.as_mut()};
-            
-            // TODO: 明显具有较大改进空间，当前主要是因为对于一些特性了解不够深入因此没有进行完全优化
-            if root.l.0.is_none() {
-                if root.r.0.is_none() {
-                    // is leaf node which will only occur when we want to delete root node
-                    self.0 = None;
-                    return;                                                                 // must return otherwise will error BC rotate
-                }
-                else {
-                    // left subtree not exist and right subtree exist => continue if right subtree height wasn't 1
-                    if root.r.height() != 1 {
-                        root.r.delete();
-                    }
-                    else {
-                        root.r = Tree(None);
-                    }
-                }
-            } 
-            else if root.r.0.is_none() {
-                // the situation where left and right subtrees is None should not happen here
-                if root.l.height() != 1 {
-                    root.l.delete();
-                } 
-                else {
-                    root.l = Tree(None);
-                }
+        match self.0 {
+            None => { None } ,
+            Some(mut root_ptr) => {
+                let root = unsafe { root_ptr.as_mut() };
+                let ret = match (root.l.0.is_none(), root.r.0.is_none()) {
+                    (true, true) => {
+                        // this is the root node (and it's leaf) => clean itself
+                        let node = self.0.unwrap().as_ptr() as usize;
+                        self.0 = None;
+                        return Some(node);
+                    },
+                    (true, false) => {
+                        match root.l.height() {
+                            1 => {
+                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                root.l = Tree(None);
+                                Some(node)
+                            },
+                            _ => root.r.delete(),
+                        }
+                    },
+                    (false, true) => {
+                        match root.r.height() {
+                            1 => {
+                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                root.r = Tree(None);
+                                Some(node)
+                            },
+                            _ => root.l.delete(),
+                        }
+                    },
+                    (false, false) => {
+                        // 这个地方实际上主要目的在于减少代码量...但是反而带来了可读性的降低
+                        match (root.l.height() < root.r.height(), core::cmp::min(root.l.height(), root.r.height())) {
+                            (true, 1) => {
+                                let node = root.l.0.unwrap().as_ptr() as usize;
+                                root.l = Tree(None);
+                                Some(node)
+                            },
+                            (true, _) => root.l.delete(),
+                            (false, 1) => {
+                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                root.r = Tree(None);
+                                Some(node)
+                            },
+                            (false, _) => root.l.delete(),
+                        }
+                    },
+                };
+                root.update();
+                self.rotate();
+                ret
             }
-            else {
-                // if not both left and right subtrees then pick a min one
-                // 开始的时候有打算采用 match + core::cmp 的方式自动识别出来对应的情况，但是后面考虑到清除连接的需要，因此没有采用这种方式，只是通过简单的 if 嵌套来实现了对应的功能
-            
-                if root.l.height() < root.r.height() {
-                    if root.l.height() == 1 {
-                        // delete node
-                        root.l = Tree(None);
-                    }
-                    else {
-                        root.l.delete();
-                    }
-                }
-                else {
-                    if root.r.height() == 1 {
-                        root.r = Tree(None);
-                    }
-                    else {
-                        root.l.delete();
-                    }
-                }
-            }
-            root.update();
-            self.rotate();
-        }
-        else {
-            // panic BC couldn't alloc 
         }
     }
 
@@ -273,7 +269,7 @@ impl Node {
     }
 }
 
-#[allow(unused_variables)]
+#[allow(unused_variables,dead_code, unused_mut)]
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
@@ -526,7 +522,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(unused_variables)]
     fn test_for_delete_lr() {
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
@@ -552,7 +547,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(unused_variables)]
     fn test_for_delete_rl() {
         let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
         let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
@@ -589,36 +583,36 @@ mod tests {
         let insertion_sequence = Vec::from([ptr2, ptr1, ptr4, ptr3]);
         tree.insert_from_list(insertion_sequence);
 
-        tree.delete();
-        tree.delete();
-
+        println!("0x{:X}", tree.delete().unwrap() );
+        println!("0x{:X}", tree.delete().unwrap() );
+        // tree.delete();
+        
         assert_eq!(tree.preorder_traversal_seq().len(), 2);
-    
+        
         // print_level_traversal(&tree, list);
-        tree.delete();
-
+        println!("0x{:X}", tree.delete().unwrap() );
+        
         assert_eq!(tree.preorder_traversal_seq().len(), 1);
         // print_level_traversal(&tree, list);
-
-        tree.delete();
-
+        
+        println!("0x{:X}", tree.delete().unwrap() );
         assert_eq!(tree.0, Tree(None).0);
+
+        assert_eq!(tree.delete(), None);
     }
-    #[allow(dead_code)]
+
     fn print_level_traversal(tree: &Tree, list: [NonNull<Node>; LIST_NUM]) {
         println!("================================================================");
         let level_vec = tree.level_traversal(list);
         println!("{:?}", level_vec);
     }
     
-    #[allow(dead_code)]
     fn print_pre_inorder_traversal(tree: &Tree, list: [NonNull<Node>; LIST_NUM]) {
         println!("================================================================");
         let pre_vec = tree.preorder_traversal_seq();
         print_vec(pre_vec, list);
     }
 
-    #[allow(dead_code)]
     fn print_vec(out: Vec<usize>, list: [NonNull<Node>; LIST_NUM]) {
         for i in 0..out.len() {
             // println!("===");

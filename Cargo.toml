@@ -12,3 +12,6 @@ keywords = ["allocator"]
 categories = ["no-std", "memory-management"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+debug = true
+
