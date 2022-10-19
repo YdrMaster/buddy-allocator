@@ -31,6 +31,7 @@
 use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
 use core::{fmt, ptr::NonNull};
 
+#[allow(dead_code)]
 /// 基于平衡二叉查找树的侵入式伙伴行。
 pub struct AvlBuddy {
     tree: Tree,
@@ -38,6 +39,7 @@ pub struct AvlBuddy {
     order: usize,
 }
 
+#[allow(dead_code)]
 impl AvlBuddy {
     #[inline]
     fn ptr_from(&self, idx: usize) -> NonNull<Node> {
@@ -73,8 +75,8 @@ impl OligarchyCollection for AvlBuddy {
     }
 
     #[inline]
-    fn put(&mut self, idx: usize) {
-        self.tree.insert(self.ptr_from(idx));
+    fn put(&mut self, _idx: usize) {
+        todo!()
     }
 }
 
@@ -105,27 +107,56 @@ struct Node {
 }
 
 impl Tree {
-    fn insert(&mut self, mut ptr: NonNull<Node>) {
-        if let Some(mut root_ptr) = self.0 {
-            // 插入结点
-            let root = unsafe { root_ptr.as_mut() };
-            if ptr < root_ptr {
-                &mut root.l
-            } else {
-                &mut root.r
-            }
-            .insert(ptr);
-            root.update();
-            self.rotate();
-        } else {
-            // 新建结点
-            self.0 = Some(ptr);
-            *unsafe { ptr.as_mut() } = Node {
-                l: Tree(None),
-                r: Tree(None),
-                h: 1,
-            };
+    #[allow(unused_variables, unused_mut,dead_code)]
+    fn insert(&mut self, mut ptr: NonNull<Node>) -> bool {
+        match self.0 {
+            Some(mut root_ptr) => {
+                // 这个地方还是与之前的完全一致，只是尝试加多一个判断
+                let root = unsafe { root_ptr.as_mut() } ;
+                if root_ptr.as_ptr() as usize == ptr.as_ptr() as usize {
+                   false
+                }
+                else {
+                    let ret = match ptr < root_ptr {
+                        true => &mut root.l,
+                        false=> &mut root.r,
+                    }.insert(ptr);
+                    root.update();
+                    self.rotate();
+                    ret 
+                }
+            },
+            None => {
+                // create a node and insert it
+                self.0 = Some(ptr);
+                *unsafe { ptr.as_mut() } = Node {
+                    l: Tree(None),
+                    r: Tree(None),
+                    h: 1, 
+                };
+                true
+            },
         }
+        // if let Some(mut root_ptr) = self.0 {
+        //     // 插入结点
+        //     let root = unsafe { root_ptr.as_mut() };
+        //     if ptr < root_ptr {
+        //         &mut root.l
+        //     } else {
+        //         &mut root.r
+        //     }
+        //     .insert(ptr);
+        //     root.update();
+        //     self.rotate();
+        // } else {
+        //     // 新建结点
+        //     self.0 = Some(ptr);
+        //     *unsafe { ptr.as_mut() } = Node {
+        //         l: Tree(None),
+        //         r: Tree(None),
+        //         h: 1,
+        //     };
+        // }
     }
     
     /// 从地址池中获取一个单位的地址, 并且返回这个地址
