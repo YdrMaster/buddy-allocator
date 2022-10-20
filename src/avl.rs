@@ -69,30 +69,51 @@ impl BuddyLine for AvlBuddy {
 }
 
 impl OligarchyCollection for AvlBuddy {
-    fn take_any(&mut self, _align_order: usize, _count: usize) -> Option<usize> {
-        todo!()
+    fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize> {
         // 个人感觉基于寡头行的数量而言，实现这个地方没有什么效率
+        if count > 1 || align_order > 0 {
+            None
+        }
+        else {
+            self.tree.delete()
+        }
     }
 
     #[inline]
-    fn put(&mut self, _idx: usize) {
-        todo!()
+    fn put(&mut self, idx: usize) {
+        self.tree.insert(self.ptr_from(idx));
     }
 }
 
 impl BuddyCollection for AvlBuddy {
+    // get a node from avl_buddy
     fn take_any(&mut self, _align_order: usize) -> Option<usize> {
-        todo!()
+        // 默认以相同大小进行分配我感觉是比较好的，但是不排除后面修改了想法
+        // TODO 需要考虑是否进行边界判断
+        if _align_order != 0 {
+            None
+        } else {
+            self.tree.delete()
+        }
     }
 
+    /// insert node into avl_buddy
     fn put(&mut self, _idx: usize) -> Option<usize> {
-        todo!()
+        let node = self.ptr_from(_idx);
+        if self.tree.insert(node) {
+            // correct insert a node into avl_buddy
+            None
+        }        
+        else {
+            // 暂且不明白
+            Some(_idx>>1)
+        }
     }
 }
 
 impl fmt::Debug for AvlBuddy {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
     }
 }
 

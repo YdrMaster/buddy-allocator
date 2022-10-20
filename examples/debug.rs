@@ -1,8 +1,8 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection};
+﻿use customizable_buddy::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection, AvlBuddy};
 use std::{collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {
-    let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new();
+    let mut allocator = BuddyAllocator::<16, BuddySet, AvlBuddy>::new();
     allocator.init(12, non_null(0x1000));
     println!();
     assert!(allocator.allocate_type::<usize>().is_err());

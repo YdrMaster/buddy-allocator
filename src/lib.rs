@@ -4,7 +4,7 @@
 //!     take_any
 //!     put      从向其中的一个位置放入指定元素
 
-// #![no_std]
+#![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 
 // TODO mod avl;
@@ -14,6 +14,8 @@ mod avl;
 
 pub use bitmap::UsizeBuddy;
 pub use linked_list::LinkedListBuddy;
+pub use avl::AvlBuddy;
+
 
 use core::{alloc::Layout, fmt, num::NonZeroUsize, ptr::NonNull};
 

@@ -1,11 +1,11 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyError, LinkedListBuddy, UsizeBuddy};
+﻿use customizable_buddy::{BuddyAllocator, BuddyError, AvlBuddy, UsizeBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},
     time::Instant,
 };
 
-type Allocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, LinkedListBuddy>;
+type Allocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, AvlBuddy>;
 
 #[repr(C, align(4096))]
 struct Page([u8; 4096]);
