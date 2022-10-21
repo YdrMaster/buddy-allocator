@@ -28,7 +28,7 @@
 //
 // B 的高度不变但整棵树的高度降低 1。
 
-use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
+use crate::{BuddyCollection, BuddyLine, OligarchyCollection, Order};
 use core::{fmt, ptr::NonNull};
 
 #[allow(dead_code)]
@@ -36,16 +36,16 @@ use core::{fmt, ptr::NonNull};
 pub struct AvlBuddy {
     tree: Tree,
     base: usize,
-    order: usize,
+    order: Order,
 }
 
-#[allow(dead_code)]
-impl AvlBuddy {
-    #[inline]
-    fn ptr_from(&self, idx: usize) -> NonNull<Node> {
-        unsafe { NonNull::new_unchecked(((self.base + idx) << self.order) as *mut Node) }
-    }
-}
+// #[allow(dead_code)]
+// impl AvlBuddy {
+//     #[inline]
+//     fn ptr_from(&self, idx: usize) -> NonNull<Node> {
+//         unsafe { NonNull::new_unchecked(((self.base + idx) << self.order) as *mut Node) }
+//     }
+// }
 
 impl BuddyLine for AvlBuddy {
     // 每个页上会保存一个 `Node`。
@@ -54,13 +54,13 @@ impl BuddyLine for AvlBuddy {
     const EMPTY: Self = Self {
         tree: Tree(None),
         base: 0,
-        order: 0,
+        order: Order::new(0),
     };
 
     #[inline]
     fn init(&mut self, order: usize, base: usize) {
         self.base = base;
-        self.order = order;
+        self.order = Order::new(order);
     }
 
     fn take(&mut self, _idx: usize) -> bool {
@@ -81,7 +81,8 @@ impl OligarchyCollection for AvlBuddy {
 
     #[inline]
     fn put(&mut self, idx: usize) {
-        self.tree.insert(self.ptr_from(idx));
+        self.tree.insert(unsafe { self.order.idx_to_ptr(idx) });
+        // todo!()
     }
 }
 
@@ -99,7 +100,8 @@ impl BuddyCollection for AvlBuddy {
 
     /// insert node into avl_buddy
     fn put(&mut self, _idx: usize) -> Option<usize> {
-        let node = self.ptr_from(_idx);
+        // let node = self.ptr_from(_idx);
+        let node = unsafe { self.order.idx_to_ptr(_idx) };
         if self.tree.insert(node) {
             // correct insert a node into avl_buddy
             None
@@ -111,9 +113,38 @@ impl BuddyCollection for AvlBuddy {
     }
 }
 
+
 impl fmt::Debug for AvlBuddy {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
+    /// 以序列化前序遍历的方式输出
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
+        // 这个地方我认为相对来说较难复现前面的算法,即使用层序便利对于结果进行呈现,可能需要采用标准搜索方案来对于结果进行呈现
+        // 同时由于在trait外部实现dfs算法相对比较困难(感觉会造成割裂感),因此采用内部函数递归来实现这个操作
+        write!(f, "[")?;
+
+        fn dfs(root: &Tree, order: &Order, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            // if it's leaf node
+            match root.0 {
+                // if it's leaf node
+                None => write!(f, "#,"),
+                Some(root_node) => {
+                    // let a = root_node.as_ref().l;
+                    dfs(unsafe {&root_node.as_ref().l }, order,  f)?;
+                    write!(f, "{:#x},", order.ptr_to_idx(root_node))?;
+                    // write!(f, "{:#x},", root_node.as_ptr() as usize)?;
+                    dfs(unsafe { &root_node.as_ref().r}, order,  f)
+                }
+            }
+            // if let None = root.0 {
+            //     write!(f, "#")
+            // }
+            // else {
+            //     write!(f, "{:X}", root.0.)
+            // }
+        }
+
+        dfs(&self.tree, &self.order, f)?;
+        write!(f, "]")
     }
 }
 
