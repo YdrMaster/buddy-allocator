@@ -1,4 +1,4 @@
-﻿//! 运算逻辑：
+//! 运算逻辑：
 //! 在进行存储的时候存在如下空间
 //! 
 //! 空间序号：1,2,3,4,5,6,7,8
@@ -91,20 +91,14 @@ impl BuddyLine for AvlBuddy {
 }
 
 impl OligarchyCollection for AvlBuddy {
-    fn take_any(&mut self, align_order: usize, count: usize) -> Option<usize> {
+    fn take_any(&mut self, _align_order: usize, _count: usize) -> Option<usize> {
         // 个人感觉基于寡头行的数量而言，实现这个地方没有什么效率
-        if count > 1 || align_order > 0 {
-            None
-        }
-        else {
-            self.tree.delete()
-        }
+        todo!()
     }
 
     #[inline]
-    fn put(&mut self, idx: usize) {
-        self.tree.insert(unsafe { self.order.idx_to_ptr(idx) });
-        // todo!()
+    fn put(&mut self, _idx: usize) {
+        todo!()
     }
 }
 
@@ -121,23 +115,21 @@ impl BuddyCollection for AvlBuddy {
     }
 
     /// insert node into avl_buddy
-    fn put(&mut self, _idx: usize) -> Option<usize> {
-        // let node = self.ptr_from(_idx);
-        let node = unsafe { self.order.idx_to_ptr(_idx) };
-        if self.tree.insert(node) {
-            // correct insert a node into avl_buddy
+    fn put(&mut self, idx: usize) -> Option<usize> {
+        if self.tree.insert(idx, &self.order) {
             None
-        }        
-        else {
-            // 暂且不明白
-            Some(_idx>>1)
+        } else {
+            // find it's buddy
+            /* DEBUG */
+            // println!("facing it's buddy");
+            Some(idx & (!(1)))
         }
     }
 }
 
 
 impl fmt::Debug for AvlBuddy {
-    /// 以序列化前序遍历的方式输出
+    /// 以序列化中序遍历的方式输出
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
         // 这个地方我认为相对来说较难复现前面的算法,即使用层序便利对于结果进行呈现,可能需要采用标准搜索方案来对于结果进行呈现
@@ -182,55 +174,61 @@ struct Node {
 
 impl Tree {
     #[allow(unused_variables, unused_mut,dead_code)]
-    fn insert(&mut self, mut ptr: NonNull<Node>) -> bool {
+    fn insert(&mut self, idx: usize, order: &Order) -> bool {
+        // 版本二：额外考虑到删除节点的情况
+        let ptr:NonNull<Node> = unsafe { order.idx_to_ptr(idx) };
         match self.0 {
             Some(mut root_ptr) => {
-                // 这个地方还是与之前的完全一致，只是尝试加多一个判断
                 let root = unsafe { root_ptr.as_mut() } ;
-                if root_ptr.as_ptr() as usize == ptr.as_ptr() as usize {
-                   false
-                }
-                else {
-                    let ret = match ptr < root_ptr {
-                        true => &mut root.l,
-                        false=> &mut root.r,
-                    }.insert(ptr);
-                    root.update();
-                    self.rotate();
-                    ret 
-                }
+                let buddy = unsafe { order.idx_to_ptr(idx ^ 1) };
+                /* DEBUG */
+                // println!("idx: {idx:#x?};\t{idx:#x?}");
+                // println!("ptr: {:#x?};\t{:#x?}", ptr.as_ptr() as usize, buddy.as_ptr() as usize);
+                // println!("");
+                use core::cmp::Ordering::*;
+                // 找到我们需要去的方向
+                let ret = match root_ptr.cmp(&buddy) {
+                    Less => {
+                        // 向右前方前进，前进前确认对应节点是否存在，以及节点是否为buddy
+                        if root.r.0.is_some() && order.ptr_to_idx(root.r.0.unwrap()) == idx ^ 1 {
+                            root.r = Tree(None);
+                            return false;
+                        }
+                        else {
+                            root.r.insert(idx, order)
+                        }
+                    },
+                    Equal => {
+                        // 个人感觉这个地方只可能出现在根节点处，因此一旦出现，则置当前节点为空
+                        self.0 = None;
+                        return true
+                    },
+                    Greater => {
+                        // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
+                        if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
+                            root.l = Tree(None);
+                            return false
+                        }
+                        else {
+                            root.l.insert(idx, order)
+                        }
+                    },
+                };
+                root.update();
+                self.rotate();
+                ret
             },
             None => {
-                // create a node and insert it
                 self.0 = Some(ptr);
-                *unsafe { ptr.as_mut() } = Node {
+                *unsafe { order.idx_to_ptr(idx).as_mut() } = Node {
                     l: Tree(None),
                     r: Tree(None),
-                    h: 1, 
+                    h: 1,
                 };
+
                 true
             },
         }
-        // if let Some(mut root_ptr) = self.0 {
-        //     // 插入结点
-        //     let root = unsafe { root_ptr.as_mut() };
-        //     if ptr < root_ptr {
-        //         &mut root.l
-        //     } else {
-        //         &mut root.r
-        //     }
-        //     .insert(ptr);
-        //     root.update();
-        //     self.rotate();
-        // } else {
-        //     // 新建结点
-        //     self.0 = Some(ptr);
-        //     *unsafe { ptr.as_mut() } = Node {
-        //         l: Tree(None),
-        //         r: Tree(None),
-        //         h: 1,
-        //     };
-        // }
     }
     
     /// 从地址池中获取一个单位的地址, 并且返回这个地址
@@ -374,389 +372,191 @@ impl Node {
     }
 }
 
-#[allow(unused_variables,dead_code, unused_mut)]
 #[cfg(test)]
-mod tests {
-    use std::collections::VecDeque;
-
+#[allow(unused_variables, dead_code)]
+mod test {
     use super::*;
-    const LIST_NUM: usize = 6;
+
+    #[repr(C, align(4096))]
+    struct Page([u8; 4096]);
+    
+    impl Page {
+        const ZERO: Self = Self([0; 4096]);
+    }
 
     impl Node {
-        fn new() -> Self {
-            Self {
-                l: Tree(None), 
-                r: Tree(None),
-                h:1, 
-            }
-        }
-    }
-
-    impl Tree {
-        
-        fn insert_from_list(&mut self, list: Vec<NonNull<Node>>) {
-            for item in 0..list.len() {
-                self.insert(list[item]);
-            }
-        }
-
-        #[allow(dead_code)]
-        fn preorder_traversal_seq(&self) -> Vec<usize> {
-            let mut ret = Vec::new();
-            ret.push(self.0.unwrap().as_ptr() as usize);
-            if let Some(root_ptr) = self.0 {
-                let root = unsafe { root_ptr.as_ref() };
-                match &root.l {
-                    Tree(None) => (),
-                    tree => ret.append(&mut tree.preorder_traversal_seq()),
-                }
-                match &root.r {
-                    Tree(None) => (),
-                    tree => ret.append(&mut tree.preorder_traversal_seq()),
-                }
-            }
-            else {
-                println!("failure");
-            }
-            return ret;
-        }
-        
-        fn level_traversal(&self, list: [NonNull<Node>; LIST_NUM]) -> Vec<VecDeque<usize>> {
-            let mut res:Vec<VecDeque<usize>> = Vec::new();
-            let mut queue:VecDeque<&Tree> = VecDeque::new();
-
-            match self.0 {
-                None => return res,
-                Some(_) => queue.push_back(self),
-            }
-
-            while !queue.is_empty() {
-                let node_size = queue.len();
-                let mut this_line = VecDeque::new();
-
-                for _ in 0..node_size {
-                    let tree = queue.pop_front().expect("msg 1");
-                    // println!("{:?}", mapping_addr_and_number(list, &tree));
-                    // this_line.push_back(tree.0.expect("msg 5").as_ptr() as usize);
-
-                    // let a = list.iter().enumerate().filter(|(v, node)| {
-                    //     node.as_ptr() as usize == tree.0.expect("msg 6").as_ptr() as usize 
-                    // });
-                    this_line.push_back(mapping_addr_and_number(list, &tree));
-
-                    unsafe {
-                        match tree.0.expect("msg 2").as_ref().l {
-                            Tree(None) => (),
-                            ref tree => queue.push_back(tree),
-                        }       
-                        match tree.0.expect("msg 3").as_ref().r {
-                            Tree(None) => (),
-                            ref tree => queue.push_back(tree),
-                        }       
-                    }
-                }
-                res.push(this_line);
-            }
-
-            res
-
-            // let ret = Vec::new();
-            // let queue = Vec::new();
-            // if let Some(node) = self.0 {
-            //     queue.push(self);
-            //     let split = Tree::new();
-            //     split.h = 0;
-            //     queue.push(split);
-            // }
-            // while let Some(node) = queue.pop() {
-            //     let node = node.0 {
-            //         Some(node) => node,
-            //     }
-            //     // let node = unsafe { node.0.unwrap().as_ref() };
-            //     if node.h == 0 {
-            //         ret.push(queue);
-            //         queue.clear();
-            //     }
-            // }
-        }
-    }
-
-    #[test]
-    fn test_for_insert_l() { 
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-
-        let insertion_sequence = Vec::from([ptr1, ptr2, ptr3]);
-        tree.insert_from_list(insertion_sequence);
-        
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list); 
-        let level_vec = tree.level_traversal(list);
-        assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        // println!("{:?}", level_vec);
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
-    }
-
-    #[test]
-    fn test_for_insert_rl() { 
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-
-        let insertion_sequence = Vec::from([ptr1, ptr2, ptr3]);
-        tree.insert_from_list(insertion_sequence);
-        
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list); 
-        let level_vec = tree.level_traversal(list);
-        assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        // println!("{:?}", level_vec);
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
+        const EMPTY: Node = Self { l:Tree(None), r: Tree(None), h: 1};
     }
     
-    #[test]
-    fn test_for_insert_r() { 
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-
-        let insertion_sequence = Vec::from([ptr3, ptr2, ptr1]);
-        tree.insert_from_list(insertion_sequence);
-        
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list); 
-        let level_vec = tree.level_traversal(list);
-        assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        // println!("{:?}", level_vec);
-
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
-    }
-
-    #[test]
-    fn test_for_insert_lr() { 
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-
-        let insertion_sequence = Vec::from([ptr3, ptr1, ptr2]);
-        tree.insert_from_list(insertion_sequence);
-        
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list); 
-        let level_vec = tree.level_traversal(list);
-        assert_eq!(level_vec, vec![vec![2], vec![1,3]]);
-        // println!("{:?}", level_vec);
-
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
-    }
-
-    #[test]
-    fn test_for_delete_l() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-        let insertion_sequence = Vec::from([ptr2, ptr1, ptr3, ptr4]);
-        tree.insert_from_list(insertion_sequence);
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-
-        tree.delete();
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-        
-        assert_eq!(mapping_addr_and_number(list, &tree), 3);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 4);
-    }
-
-    #[test]
-    #[allow(unused_variables)]
-    fn test_for_delete_r() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-        let insertion_sequence = Vec::from([ptr3, ptr4, ptr2, ptr1]);
-        tree.insert_from_list(insertion_sequence);
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-
-        tree.delete();
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-        
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
-    }
-
-    #[test]
-    fn test_for_delete_lr() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-        let insertion_sequence = Vec::from([ptr3, ptr4, ptr1, ptr2]);
-        tree.insert_from_list(insertion_sequence);
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-
-        tree.delete();
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-        
-        assert_eq!(mapping_addr_and_number(list, &tree), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 1);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 3);
-    }
-
-    #[test]
-    fn test_for_delete_rl() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-        let insertion_sequence = Vec::from([ptr2, ptr1, ptr4, ptr3]);
-        tree.insert_from_list(insertion_sequence);
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-
-        tree.delete();
-
-        // print_level_traversal(&tree, list);
-        // print_pre_inorder_traversal(&tree, list);
-        
-        assert_eq!(mapping_addr_and_number(list, &tree), 3);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().l }), 2);
-        assert_eq!(mapping_addr_and_number(list, unsafe { &tree.0.unwrap().as_ref().r }), 4);
-    }
-
-    #[test] 
-    fn test_for_delete_root() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
-        // println!("ptr1  {:p}", ptr1);println!("ptr2  {:p}", ptr2);println!("ptr3  {:p}", ptr3);println!("ptr4  {:p}", ptr4);println!("ptr5  {:p}", ptr5);println!("ptr6  {:p}", ptr6);
-
-        let mut tree = Tree(None);
-        let list = [ptr1, ptr2, ptr3, ptr4, ptr5, ptr6];
-
-        let insertion_sequence = Vec::from([ptr2, ptr1, ptr4, ptr3]);
-        tree.insert_from_list(insertion_sequence);
-
-        println!("0x{:X}", tree.delete().unwrap() );
-        println!("0x{:X}", tree.delete().unwrap() );
-        // tree.delete();
-        
-        assert_eq!(tree.preorder_traversal_seq().len(), 2);
-        
-        // print_level_traversal(&tree, list);
-        println!("0x{:X}", tree.delete().unwrap() );
-        
-        assert_eq!(tree.preorder_traversal_seq().len(), 1);
-        // print_level_traversal(&tree, list);
-        
-        println!("0x{:X}", tree.delete().unwrap() );
-        assert_eq!(tree.0, Tree(None).0);
-
-        assert_eq!(tree.delete(), None);
-    }
-
-    fn print_level_traversal(tree: &Tree, list: [NonNull<Node>; LIST_NUM]) {
-        println!("================================================================");
-        let level_vec = tree.level_traversal(list);
-        println!("{:?}", level_vec);
-    }
-    
-    fn print_pre_inorder_traversal(tree: &Tree, list: [NonNull<Node>; LIST_NUM]) {
-        println!("================================================================");
-        let pre_vec = tree.preorder_traversal_seq();
-        print_vec(pre_vec, list);
-    }
-
-    fn print_vec(out: Vec<usize>, list: [NonNull<Node>; LIST_NUM]) {
-        for i in 0..out.len() {
-            // println!("===");
-            // println!("{}", out[i]);
-            list.iter().enumerate().for_each(|(v, ptr)| {
-                // println!("{}", ptr.as_ptr() as usize);
-                if ptr.as_ptr() as usize == out[i] {
-                    print!("{}  ", v + 1);
-                };
-            });
+    /// 256 MiB
+    static mut MEMORY: [Page; 1024] = [Page::ZERO; 1024];
+    // 彼此之间要间隔开至少24个数字
+    // NonNull<Node>: 8; Node: 24; u8:1
+    // 0  64  128  192  256  320  384  448  512  576  640  704  768  832  896  960
+    fn create_nonnull_list() -> Vec<NonNull<Node>> {
+        let mut list = Vec::new();
+        for i in 0..1024/64 {
+            list.push(unsafe { NonNull::new_unchecked(MEMORY[i*64].0.as_mut_ptr() as *mut Node) });
         }
-        println!();
-    }
-
-    // 让序号更加直观
-    fn mapping_addr_and_number(list: [NonNull<Node> ; LIST_NUM], addr: &Tree) -> usize {
-        let ptr_for_node = addr.0.expect("msg 6").as_ptr() as usize;
+        println!("num\tidx\t\tptr");
         for i in 0..list.len() {
-            if ptr_for_node == list[i].as_ptr() as usize {
-                return i + 1;
-            }
+            print!("> {i}:\t");
+            print!("{:#x?}\t", (list[i].as_ptr() as usize) >> ORDER_LEVEL);
+            println!("{:#x?}", (list[i].as_ptr() as usize));
         }
-        100 
+        list
     }
 
+    use crate::{BuddyCollection, AvlBuddy};
+    const ORDER_LEVEL: usize = 12;
+    /* TEST FOR BASAL INSERT OPERATION */
     #[test]
-    #[allow(unused_variables)]
-    fn test_if_cmp_could_using_to_compare_two_nonnull() {
-        let mut a = Node::new();let mut b = Node::new();let mut c = Node::new();let mut d = Node::new();let mut e = Node::new(); let mut f = Node::new();
-        let ptr1: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut a as *mut _) }; let ptr2: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut b as *mut _) }; let ptr3: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut c as *mut _) }; let ptr4: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut d as *mut _) }; let ptr5: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut e as *mut _) }; let ptr6: NonNull<Node> = unsafe { NonNull::new_unchecked(&mut f as *mut _) };
+    fn test_for_insert_l() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        let a = core::cmp::min(ptr1, ptr2);
-        let b = core::cmp::min(ptr3, ptr2);
-        // println!("{ptr1:?}, {ptr2:?}");
-        // println!("{ptr3:?}, {ptr2:?}");
-        // println!("{:?}", a);
-        // println!("{:?}", b);
-        assert_eq!(a, ptr1);
-        assert_eq!(b, ptr2);
-    }    
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
+
+        // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+    }
+    #[test]
+    fn test_for_insert_r() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
+
+        // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+    }
+    #[test]
+    fn test_for_insert_lr() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
+
+        // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+    } 
+    #[test]
+    fn test_for_insert_rl() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+    } 
+    /* TEST FOR BUDDY OPERATION: DELETE BUDDY NODE AND NOT INSERT */
+    #[test]
+    fn test_for_insert_buddy_root() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let root_idx = (vec[7].as_ptr() as usize) >> ORDER_LEVEL;
+        let buddy_idx = ((vec[7].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{root_idx:#x?}\t{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, root_idx);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+        
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0, None);
+    } 
+    #[test]
+    fn test_for_insert_buddy_other_left_leaf() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let buddy_idx = ((vec[7].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0 }, None);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+    }
+    #[test]
+    fn test_for_insert_buddy_other_right_leaf() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0 }, None);
+    }
+    #[test]
+    fn test_for_insert_buddy_other_left_not_leaf() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let buddy_idx = ((vec[6].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        // assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[9]);
+        assert!(false);
+    }
+
 
 }
