@@ -190,7 +190,7 @@ impl Tree {
                 // if have right and it's right
                 find_max(unsafe { &node.as_ref().r.0.unwrap() })
             } else {
-                node.to_owned()
+                node.clone()
             }
         }
         /// 找到并返回距离最小子树最近的子树
@@ -199,7 +199,7 @@ impl Tree {
                 find_min(unsafe { &node.as_ref().l.0.unwrap() })
             }
             else {
-                node.to_owned()
+                node.clone()
             }
         }
         
@@ -309,7 +309,7 @@ impl Tree {
                         //     root.l.insert(idx, order)
                         // }
                         // 向左方前进，前进前确定对应节点是否存在，以及节点是否是 buddy 
-                        if root.l.0.is_some() && order.ptr_to_idx(root.r.0.unwrap()) == idx ^ 1 {
+                        if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
 
                             // if delete node is not leaf => delete link
                             let node = unsafe { root.l.0.unwrap().as_mut() };
@@ -363,7 +363,7 @@ impl Tree {
                             return false;
                         }
                         else {
-                            root.r.insert(idx, order)
+                            root.l.insert(idx, order)
                         }
                     },
                 };
@@ -682,8 +682,8 @@ mod test {
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-
         println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
@@ -705,7 +705,6 @@ mod test {
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
         println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-
         println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[10]);
