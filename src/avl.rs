@@ -129,7 +129,7 @@ impl BuddyCollection for AvlBuddy {
 
 
 impl fmt::Debug for AvlBuddy {
-    /// 以序列化中序遍历的方式输出
+    /// 以序列化前序遍历的方式输出
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
         // 这个地方我认为相对来说较难复现前面的算法,即使用层序便利对于结果进行呈现,可能需要采用标准搜索方案来对于结果进行呈现
@@ -143,8 +143,8 @@ impl fmt::Debug for AvlBuddy {
                 None => write!(f, "#,"),
                 Some(root_node) => {
                     // let a = root_node.as_ref().l;
-                    dfs(unsafe {&root_node.as_ref().l }, order,  f)?;
                     write!(f, "{:#x},", order.ptr_to_idx(root_node))?;
+                    dfs(unsafe {&root_node.as_ref().l }, order,  f)?;
                     // write!(f, "{:#x},", root_node.as_ptr() as usize)?;
                     dfs(unsafe { &root_node.as_ref().r}, order,  f)
                 }
@@ -163,6 +163,7 @@ impl fmt::Debug for AvlBuddy {
 }
 
 #[repr(transparent)]
+// #[derive(Clone, Copy)]
 struct Tree(Option<NonNull<Node>>);
 
 #[repr(C)]
@@ -175,23 +176,117 @@ struct Node {
 impl Tree {
     #[allow(unused_variables, unused_mut,dead_code)]
     fn insert(&mut self, idx: usize, order: &Order) -> bool {
+        // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
+        
+        /// 找到并返回距离最大子树最近的子树
+        fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
+            // 需要考虑到有左子树的情况
+            //  [A]    (node)
+            //    \ 
+            //     [B] (node.r)
+            //    /
+            //   [?]
+            if unsafe { node.as_ref().r.0.is_some() && node.as_ref().r.0.unwrap().as_ref().r.0.is_some() } {
+                // if have right and it's right
+                find_max(unsafe { &node.as_ref().r.0.unwrap() })
+            } else {
+                node.to_owned()
+            }
+        }
+        /// 找到并返回距离最小子树最近的子树
+        fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
+            if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
+                find_min(unsafe { &node.as_ref().l.0.unwrap() })
+            }
+            else {
+                node.to_owned()
+            }
+        }
+        
         // 版本二：额外考虑到删除节点的情况
         let ptr:NonNull<Node> = unsafe { order.idx_to_ptr(idx) };
         match self.0 {
+            // if this node is not empty
             Some(mut root_ptr) => {
                 let root = unsafe { root_ptr.as_mut() } ;
                 let buddy = unsafe { order.idx_to_ptr(idx ^ 1) };
-                /* DEBUG */
-                // println!("idx: {idx:#x?};\t{idx:#x?}");
-                // println!("ptr: {:#x?};\t{:#x?}", ptr.as_ptr() as usize, buddy.as_ptr() as usize);
-                // println!("");
                 use core::cmp::Ordering::*;
+                // use core::mem::replace;
+
                 // 找到我们需要去的方向
                 let ret = match root_ptr.cmp(&buddy) {
                     Less => {
+
                         // 向右前方前进，前进前确认对应节点是否存在，以及节点是否为buddy
                         if root.r.0.is_some() && order.ptr_to_idx(root.r.0.unwrap()) == idx ^ 1 {
-                            root.r = Tree(None);
+
+                            // if deleted node is not leaf => delete link
+                            let node = unsafe { root.r.0.unwrap().as_mut() };
+                            match (node.l.0.is_some(), node.r.0.is_some()) {
+                                (true, true) => {
+                                    // have both left and right subtree
+                                    if node.l.height() < node.r.height() {
+                                        // if left tree higher then right tree
+                                        //  [A]   (root)|   [A]
+                                        //  / \         |   / \
+                                        // .. [B] (node)|  ..  [E]
+                                        //    /   \     |      /  \
+                                        //  [C]   [D]   |    [C]  [D]
+                                        //    \         |
+                                        //    [E] (leaf)|
+                                        let mut leaf_point = find_max(&node.l.0.unwrap());
+                                        let mut leaf = unsafe { leaf_point.as_mut() };
+                                        if leaf.l.0.is_some() {
+                                            leaf.l = Tree(node.l.0);
+                                            node.l = Tree(None);
+                                        }
+                                        if node.r.0.is_some() {
+                                            leaf.r = Tree(node.r.0);
+                                            node.r = Tree(None);
+                                        }
+                                        root.r = Tree(Some(leaf_point));
+                                    } else {
+                                        // right tree higher than left tree
+                                        let mut leaf_point = find_min(&node.r.0.unwrap());
+                                        let mut leaf = unsafe { leaf_point.as_mut() } ;
+                                        if leaf.r.0.is_some() {
+                                            leaf.r = Tree(node.r.0);
+                                            node.r = Tree(None);
+                                        }
+                                        if node.l.0.is_some() {
+                                            leaf.l = Tree(node.l.0);
+                                            node.l = Tree(None);
+                                        }
+                                        root.r = Tree(Some(leaf_point));
+                                    }
+                                    node.update();
+                                    root.r.rotate();
+                                },
+                                (true, false) => {
+                                    // have left but not right
+                                    // [A] <- root   | [A]
+                                    //   \           |   \
+                                    //    [B] <- node|  [C]
+                                    //    /          |   
+                                    //  [C]          |   
+                                    root.r = Tree(Some(node.l.0.unwrap()));
+                                    node.l = Tree(None);
+                                },
+                                (false, true) => {
+                                    // have left but not right
+                                    // [A] <- root   | [A]
+                                    //   \           |   \
+                                    //    [B] <- node|  [C]
+                                    //      \        |   
+                                    //      [C]      | 这个地方不能直接上旋转，将节点转到叶子的原因是太麻烦了   
+                                    // root.r = replace(&mut root.r, Tree(Some(node.r.0.unwrap())));
+                                    root.r = Tree(Some(node.r.0.unwrap()));
+                                    node.l = Tree(None);
+                                },
+                                (false, false) => {
+                                    root.r = Tree(None);
+                                },
+                            }
                             return false;
                         }
                         else {
@@ -204,13 +299,71 @@ impl Tree {
                         return true
                     },
                     Greater => {
-                        // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
-                        if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
-                            root.l = Tree(None);
-                            return false
+                        // // todo!()
+                        // // // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
+                        // if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
+                        //     root.l = Tree(None);
+                        //     return false
+                        // }
+                        // else {
+                        //     root.l.insert(idx, order)
+                        // }
+                        // 向左方前进，前进前确定对应节点是否存在，以及节点是否是 buddy 
+                        if root.l.0.is_some() && order.ptr_to_idx(root.r.0.unwrap()) == idx ^ 1 {
+
+                            // if delete node is not leaf => delete link
+                            let node = unsafe { root.l.0.unwrap().as_mut() };
+                            match (node.l.0.is_some(), node.r.0.is_some()) {
+                                (true, true) => {
+                                    // have both left and right subtree
+                                    if node.l.height() < node.r.height() {
+                                        let mut leaf_point = find_max(&node.l.0.unwrap());
+                                        let mut leaf = unsafe { leaf_point.as_mut() };
+                                        if leaf.l.0.is_some() {
+                                            leaf.l = Tree(node.l.0);
+                                            node.l = Tree(None);
+                                        }
+                                        if node.r.0.is_some() {
+                                            leaf.r = Tree(node.r.0);
+                                            node.r = Tree(None);
+                                        }
+                                        root.l = Tree(Some(leaf_point));
+                                    }
+                                    else {
+                                        let mut leaf_point = find_min(&node.r.0.unwrap());
+                                        let mut leaf = unsafe { leaf_point.as_mut() } ;
+                                        if leaf.r.0.is_some() {
+                                            leaf.r = Tree(node.r.0);
+                                            node.r = Tree(None);
+                                        }
+                                        if node.l.0.is_some() {
+                                            leaf.l = Tree(node.l.0);
+                                            node.l = Tree(None);
+                                        }
+                                        root.l = Tree(Some(leaf_point));
+                                    }
+                                    node.update();
+                                    root.l.rotate();
+                                },
+                                (true, false) => {
+                                    // have left node but not right
+                                    root.l = Tree(Some(node.l.0.unwrap()));
+                                    node.l = Tree(None);
+                                },
+                                (false, true) => {
+                                    // have right node but not left
+                                    root.l = Tree(Some(node.r.0.unwrap()));
+                                    node.l = Tree(None);
+                                },
+                                (false, false) => {
+                                    // is leaf node
+                                    root.l = Tree(None);
+                                },
+                            }
+                            return false;
                         }
                         else {
-                            root.l.insert(idx, order)
+                            root.r.insert(idx, order)
                         }
                     },
                 };
@@ -218,6 +371,7 @@ impl Tree {
                 self.rotate();
                 ret
             },
+            // if this node is empty 
             None => {
                 self.0 = Some(ptr);
                 *unsafe { order.idx_to_ptr(idx).as_mut() } = Node {
@@ -498,7 +652,7 @@ mod test {
         assert_eq!(avl_buddy.tree.0, None);
     } 
     #[test]
-    fn test_for_insert_buddy_other_left_leaf() {
+    fn test_for_insert_buddy_left_leaf() {
         let vec = create_nonnull_list();
         println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
@@ -517,7 +671,7 @@ mod test {
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
     }
     #[test]
-    fn test_for_insert_buddy_other_right_leaf() {
+    fn test_for_insert_buddy_right_leaf() {
         let vec = create_nonnull_list();
         println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
@@ -536,27 +690,92 @@ mod test {
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0 }, None);
     }
     #[test]
-    fn test_for_insert_buddy_other_left_not_leaf() {
+    fn test_for_insert_buddy_right_not_leaf_right_only() {
         let vec = create_nonnull_list();
         println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        let buddy_idx = ((vec[6].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        println!("{avl_buddy:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[10]);
+    }
+    #[test]
+    fn test_for_insert_buddy_right_not_leaf_left_only() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
         println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
-        // assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[9]);
-        assert!(false);
     }
+    #[test]
+    fn test_for_insert_buddy_right_not_leaf_both_no_subleaf() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
+        let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
+        println!("{avl_buddy:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
+    }
+    #[test]
+    fn test_for_insert_buddy_right_not_leaf_both_with_subleaf() {
+        let vec = create_nonnull_list();
+        println!("{}", vec.len());
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
+        println!("{buddy_idx:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[12].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[2].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
+        println!("{avl_buddy:#x?}");
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
+        println!("{avl_buddy:#x?}");
+        assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
+    }
+    // #[test]
+    
 
 }
