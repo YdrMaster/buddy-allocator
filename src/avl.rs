@@ -177,35 +177,36 @@ struct Node {
     h: usize,
 }
 
+fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
+    // 需要考虑到有左子树的情况
+    //  [A]    (node)
+    //    \ 
+    //     [B] (node.r)
+    //    /
+    //   [?]
+    if unsafe { node.as_ref().r.0.is_some() && node.as_ref().r.0.unwrap().as_ref().r.0.is_some() } {
+        // if have right and it's right
+        find_max(unsafe { &node.as_ref().r.0.unwrap() })
+    } else {
+        node.clone()
+    }
+}
+/// 找到并返回距离最小子树最近的子树
+fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
+    if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
+        find_min(unsafe { &node.as_ref().l.0.unwrap() })
+    }
+    else {
+        node.clone()
+    }
+}
+
 impl Tree {
+    /// 找到并返回距离最大子树最近的子树
     #[allow(unused_variables, unused_mut,dead_code)]
     fn insert(&mut self, idx: usize, order: &Order) -> bool {
         // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
         
-        /// 找到并返回距离最大子树最近的子树
-        fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
-            // 需要考虑到有左子树的情况
-            //  [A]    (node)
-            //    \ 
-            //     [B] (node.r)
-            //    /
-            //   [?]
-            if unsafe { node.as_ref().r.0.is_some() && node.as_ref().r.0.unwrap().as_ref().r.0.is_some() } {
-                // if have right and it's right
-                find_max(unsafe { &node.as_ref().r.0.unwrap() })
-            } else {
-                node.clone()
-            }
-        }
-        /// 找到并返回距离最小子树最近的子树
-        fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
-            if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
-                find_min(unsafe { &node.as_ref().l.0.unwrap() })
-            }
-            else {
-                node.clone()
-            }
-        }
         
         // 版本二：额外考虑到删除节点的情况
         let ptr:NonNull<Node> = unsafe { order.idx_to_ptr(idx) };
@@ -335,8 +336,56 @@ impl Tree {
                     },
                     Equal => {
                         // 个人感觉这个地方只可能出现在根节点处，因此一旦出现，则置当前节点为空
-                        self.0 = None;
-                        return true
+                        // self.0 = None;
+                        // return true
+                        match (root.l.0.is_some(), root.r.0.is_some()) {
+                            (true, true) => {
+                                match (root.l.height() < root.r.height(), core::cmp::max(root.l.height(), root.r.height())) {
+                                    (_, 1) => {
+                                        // if both of left and right is leaf => choice left as root
+                                        let left = unsafe { root.l.0.unwrap().as_mut() };
+                                        left.l = Tree(None);
+                                        left.r = Tree(root.r.0);
+                                        self.0 = NonNull::new(left);
+                                    },
+                                    (true, _) => {
+                                        // right higher that left
+                                        let mut beyond = unsafe { find_min(&root.r.0.unwrap()).as_mut() };
+                                        let mut leaf = unsafe { beyond.l.0.unwrap().as_mut() };
+                                        if leaf.r.0.is_some() {
+                                            beyond.l = Tree(leaf.r.0);
+                                            leaf.r = Tree(None);
+                                        }
+                                        leaf.l = Tree(root.l.0);
+                                        leaf.r = Tree(root.r.0);    // BC 高度一定大于1,因此不会出现循环的情况
+                                        self.0 = NonNull::new(leaf);
+                                    },
+                                    (false, _)=> {
+                                        // left higher than right
+                                        let mut beyond = unsafe { find_max(&root.l.0.unwrap()).as_mut() };
+                                        let mut leaf = unsafe { beyond.r.0.unwrap().as_mut() };
+                                        if leaf.l.0.is_some() {
+                                            beyond.r = Tree(leaf.l.0);
+                                            leaf.l = Tree(None);
+                                        }
+                                        leaf.l = Tree(root.l.0);
+                                        leaf.r = Tree(root.r.0);
+                                        self.0 = NonNull::new(leaf);
+                                    },
+                                }
+                            },
+                            (true, false) => {
+                                self.0 = Some(root.l.0.unwrap());
+                            },
+                            (false, true) => {
+                                self.0 = Some(root.r.0.unwrap());
+                            },
+                            (false, false) => {
+                                self.0 = None;
+                            },
+                        };
+
+                        false
                     },
                     Greater => {
                         // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
@@ -490,13 +539,13 @@ impl Tree {
                             (true, 1) => {
                                 let node = order.ptr_to_idx(root.l.0.unwrap());
                                 root.l = Tree(None);
-                                Some(node)
+                                return Some(node)
                             },
                             (true, _) => root.l.delete(order),
                             (false, 1) => {
                                 let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
-                                Some(node)
+                                return Some(node)
                             },
                             (false, _) => root.l.delete(order),
                         }
@@ -507,7 +556,7 @@ impl Tree {
                             1 => {
                                 let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.l = Tree(None);
-                                Some(node)
+                                return Some(node)
                             },
                             _ => root.r.delete(order),
                         }
@@ -518,7 +567,7 @@ impl Tree {
                             1 => {
                                 let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
-                                Some(node)
+                                return Some(node)
                             },
                             _ => root.l.delete(order),
                         }
