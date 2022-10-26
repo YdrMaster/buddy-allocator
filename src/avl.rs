@@ -111,7 +111,7 @@ impl BuddyCollection for AvlBuddy {
         if _align_order != 0 {
             None
         } else {
-            self.tree.delete()
+            self.tree.delete(&self.order)
         }
     }
 
@@ -145,7 +145,9 @@ impl fmt::Debug for AvlBuddy {
                 None => write!(f, "#,"),
                 Some(root_node) => {
                     // let a = root_node.as_ref().l;
-                    write!(f, "{:#x}[{:?}],", order.ptr_to_idx(root_node), unsafe { root_node.as_ref().h })?;
+                    // write!(f, "{:#x}[{:?}],", order.ptr_to_idx(root_node), unsafe { root_node.as_ref().h })?;
+                    // write!(f, "{:#x}[{:?}],", root_node.as_ptr() as usize, unsafe { root_node.as_ref().h })?;
+                    write!(f, "{:#x},", root_node.as_ptr() as usize)?;
                     dfs(unsafe {&root_node.as_ref().l }, order,  f)?;
                     // write!(f, "{:#x},", root_node.as_ptr() as usize)?;
                     dfs(unsafe { &root_node.as_ref().r}, order,  f)
@@ -337,7 +339,6 @@ impl Tree {
                         return true
                     },
                     Greater => {
-                        // todo!()
                         // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
                         // if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
                         //     root.l = Tree(None);
@@ -465,7 +466,6 @@ impl Tree {
                     r: Tree(None),
                     h: 1,
                 };
-
                 true
             },
         }
@@ -473,7 +473,7 @@ impl Tree {
     
     /// 从地址池中获取一个单位的地址, 并且返回这个地址
     #[allow(dead_code, unused_variables,unused_mut)]
-    fn delete(&mut self) -> Option<usize>{
+    fn delete(&mut self, order: &Order) -> Option<usize>{
         /* 
         根据需求，此处需要实现的子模块包括，通过 左右子树中的最小高度导航到 到最近的叶子结点，然后再进行 删除节点操作
         删除节点操作的时候，由于当前操作在叶子节点处产生，因此不需要考虑额外信息，直接将其删除即可
@@ -488,44 +488,45 @@ impl Tree {
                         // 这个地方实际上主要目的在于减少代码量...但是反而带来了可读性的降低
                         match (root.l.height() < root.r.height(), core::cmp::min(root.l.height(), root.r.height())) {
                             (true, 1) => {
-                                let node = root.l.0.unwrap().as_ptr() as usize;
+                                let node = order.ptr_to_idx(root.l.0.unwrap());
                                 root.l = Tree(None);
                                 Some(node)
                             },
-                            (true, _) => root.l.delete(),
+                            (true, _) => root.l.delete(order),
                             (false, 1) => {
-                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
                                 Some(node)
                             },
-                            (false, _) => root.l.delete(),
+                            (false, _) => root.l.delete(order),
                         }
                     },
                     (true, false) => {
                         // only have left subtree
                         match root.l.height() {
                             1 => {
-                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.l = Tree(None);
                                 Some(node)
                             },
-                            _ => root.r.delete(),
+                            _ => root.r.delete(order),
                         }
                     },
                     (false, true) => {
                         // only have right subtree
                         match root.r.height() {
                             1 => {
-                                let node = root.r.0.unwrap().as_ptr() as usize;
+                                let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
                                 Some(node)
                             },
-                            _ => root.l.delete(),
+                            _ => root.l.delete(order),
                         }
                     },
                     (false, false) => {
                         // this is the root node (and it's leaf) => clean itself
-                        let node = self.0.unwrap().as_ptr() as usize;
+                        // let node = self.0.unwrap().as_ptr() as usize;
+                        let node = order.ptr_to_idx(self.0.unwrap());
                         self.0 = None;
                         return Some(node);
                     },
@@ -874,12 +875,8 @@ mod test {
 
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         let a = <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0);
-        println!("A");
 
-        assert_eq!(avl_buddy.tree, None);
+        assert_eq!(avl_buddy.tree.0, None);
     }
 
-    fn test_for_delete_right_subtree() {
-
-    }
 }
