@@ -117,7 +117,8 @@ impl BuddyCollection for AvlBuddy {
 
     /// insert node into avl_buddy
     fn put(&mut self, idx: usize) -> Option<usize> {
-        if self.tree.insert(idx, &self.order) {
+        // 需要额外考虑一个事情，就是在进行分配的时候，最小分配单元必须大于Node，因为这个Node实际上是存放在分配的空间中的，因此需要加入判定以确保空间不会出现重叠的情况
+        if self.order.0 >= <Self as BuddyLine>::MIN_ORDER && self.tree.insert(idx, &self.order) {
             None
         } else {
             // find it's buddy
@@ -145,9 +146,9 @@ impl fmt::Debug for AvlBuddy {
                 None => write!(f, "#,"),
                 Some(root_node) => {
                     // let a = root_node.as_ref().l;
-                    // write!(f, "{:#x}[{:?}],", order.ptr_to_idx(root_node), unsafe { root_node.as_ref().h })?;
+                    write!(f, "{:#x}[{:?}],", order.ptr_to_idx(root_node), unsafe { root_node.as_ref().h })?;
                     // write!(f, "{:#x}[{:?}],", root_node.as_ptr() as usize, unsafe { root_node.as_ref().h })?;
-                    write!(f, "{:#x},", root_node.as_ptr() as usize)?;
+                    // write!(f, "{:#x},", root_node.as_ptr() as usize)?;
                     dfs(unsafe {&root_node.as_ref().l }, order,  f)?;
                     // write!(f, "{:#x},", root_node.as_ptr() as usize)?;
                     dfs(unsafe { &root_node.as_ref().r}, order,  f)
@@ -177,6 +178,8 @@ struct Node {
     h: usize,
 }
 
+/// 以递归方式找到距离传入子树最大节点最近的子树节点
+/// 注意：调用者需要考虑到传出节点可能存在反向子树的情况
 fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
     // 需要考虑到有左子树的情况
     //  [A]    (node)
@@ -191,8 +194,16 @@ fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
         node.clone()
     }
 }
-/// 找到并返回距离最小子树最近的子树
+
+/// 以递归方式找到并返回距离最小子树最近的子树
+/// 注意：调用者需要考虑到可能传出节点存在反向子树的情况
 fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
+    // 需要考虑有右子树的情况
+    //    [a]          (node)
+    //    /
+    //   [b]            (min point)
+    //    \ 
+    //     [c]
     if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
         find_min(unsafe { &node.as_ref().l.0.unwrap() })
     }
@@ -206,9 +217,8 @@ impl Tree {
     #[allow(unused_variables, unused_mut,dead_code)]
     fn insert(&mut self, idx: usize, order: &Order) -> bool {
         // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
-        
-        
-        // 版本二：额外考虑到删除节点的情况
+         
+        // 版本二：在进行插入的时候直接完成对应伙伴节点的删除工作
         let ptr:NonNull<Node> = unsafe { order.idx_to_ptr(idx) };
         match self.0 {
             // if this node is not empty
@@ -222,21 +232,34 @@ impl Tree {
                 let ret = match root_ptr.cmp(&buddy) {
                     Less => {
 
-                        // 向右前方前进，前进前确认对应节点是否存在，以及节点是否为buddy
+                        // 向右前方前进， 并且右边子树节点为伙伴节点 => 此时做可能出现的所有删除情形的判断
                         if root.r.0.is_some() && order.ptr_to_idx(root.r.0.unwrap()) == idx ^ 1 {
 
-                            // if deleted node is not leaf => delete link
                             let node = unsafe { root.r.0.unwrap().as_mut() };
+                            // 测试两个子树的状态
                             match (node.l.0.is_some(), node.r.0.is_some()) {
                                 (true, true) => {
                                     // have both left and right subtree
                                     if node.l.height() < node.r.height() {
                                         // right tree higher than left tree
+                                        // node:    the point you want to delete
+                                        // byond:   the point byond the leaf
+                                        // [A]   (root)     | [A]
+                                        //   \              |  \   
+                                        //   [B] (node)     |   [E]
+                                        //   / \            |   / \
+                                        //  [C] [D](byond)  | [C] [D]
+                                        //      /           |       \
+                                        // (E:leaf)         |        [F]
+                                        //     \
+                                        //     [F]
                                         if node.l.height() == 1 {
+                                            // left subtree is leaf => delete node
                                             let leaf = unsafe { node.l.0.unwrap().as_mut() };
                                             leaf.r = Tree(node.r.0);
                                             root.r = Tree(NonNull::new(leaf));
                                         } else {
+                                            // left subtree has subtree => delete link and relink this link to it's parent then delete node
                                             let mut beyond = unsafe { find_max(&node.l.0.unwrap()).as_mut() };
                                             let mut leaf  = unsafe { beyond.l.0.unwrap().as_mut() };
 
@@ -248,26 +271,24 @@ impl Tree {
                                             leaf.r = Tree(node.r.0);
                                             root.r = Tree(NonNull::new(leaf));
                                         }
-                                        // let mut leaf_point = find_min(&node.r.0.unwrap()); let mut leaf = unsafe { leaf_point.as_mut() } ;
-                                        // if leaf.r.0.is_some() {
-                                        //     leaf.r = Tree(node.r.0);
-                                        //     node.r = Tree(None);
-                                        // }
-                                        // if node.l.0.is_some() {
-                                        //     leaf.l = Tree(node.l.0);
-                                        //     node.l = Tree(None);
-                                        // }
-                                        // root.r = Tree(Some(leaf_point));
                                     } else {
                                         // left tree higher than right subtree
-
-                                        // 是否有右子树高度为 1 -> 不进行搜索，因为没有办法找到距离最大值最近的点
-                                        // let mut beyond_point = find_max(&node.l.0.unwrap());
+                                        //  [A]   (root)    |   [A]
+                                        //  / \             |   / \
+                                        // .. [B] (node)    |  ..  [E]
+                                        //    /       \     |      /  \
+                                        //  [C](byond)[D]   |    [C]  [D]
+                                        //    \             |     \
+                                        //    [E] (leaf)    |     [F]
+                                        //     \
+                                        //      [F]
                                         if node.r.height() == 1 {
+                                            // right subtree is leaf => delete node
                                             let leaf = unsafe { node.r.0.unwrap().as_mut() };
                                             leaf.l = Tree(node.l.0);
                                             root.r = Tree(NonNull::new(leaf));
                                         } else {
+                                            // right subtree has subtree => delete link and relink this link to it's parent then delete node
                                             let mut beyond = unsafe { find_max(&node.l.0.unwrap()).as_mut() };
                                             let mut leaf  = unsafe { beyond.l.0.unwrap().as_mut() };
 
@@ -279,26 +300,6 @@ impl Tree {
                                             leaf.r = Tree(node.r.0);
                                             root.r = Tree(NonNull::new(leaf));
                                         }
-                                        // if left tree higher then right tree
-                                        //  [A]   (root)|   [A]
-                                        //  / \         |   / \
-                                        // .. [B] (node)|  ..  [E]
-                                        //    /   \     |      /  \
-                                        //  [C]   [D]   |    [C]  [D]
-                                        //    \         |
-                                        //    [E] (leaf)|
-                                        
-                                        // let mut leaf_point = find_max(&node.l.0.unwrap());
-                                        // let mut leaf = unsafe { leaf_point.as_mut() };
-                                        // if leaf.l.0.is_some() {
-                                        //     leaf.l = Tree(node.l.0);
-                                        //     node.l = Tree(None);
-                                        // }
-                                        // if node.r.0.is_some() {
-                                        //     leaf.r = Tree(node.r.0);
-                                        //     node.r = Tree(None);
-                                        // }
-                                        // root.r = Tree(Some(leaf_point));
                                     }
                                     node.update();
                                     root.r.rotate();
@@ -320,7 +321,6 @@ impl Tree {
                                     //    [B] <- node|  [C]
                                     //      \        |   
                                     //      [C]      | 这个地方不能直接上旋转，将节点转到叶子的原因是太麻烦了   
-                                    // root.r = replace(&mut root.r, Tree(Some(node.r.0.unwrap())));
                                     root.r = Tree(Some(node.r.0.unwrap()));
                                     node.l = Tree(None);
                                 },
@@ -331,6 +331,7 @@ impl Tree {
                             return false;
                         }
                         else {
+                            // 如果前进的方向不是 buddy 节点，则以递归方式继续进行插入，一直到达对应的位置(插入于空节点)
                             root.r.insert(idx, order)
                         }
                     },
@@ -382,6 +383,7 @@ impl Tree {
                             },
                             (false, false) => {
                                 self.0 = None;
+                                return false;
                             },
                         };
 
@@ -389,14 +391,6 @@ impl Tree {
                     },
                     Greater => {
                         // 向左方前进，前进前确认对应节点是否存在，以及节点是否是buddy
-                        // if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
-                        //     root.l = Tree(None);
-                        //     return false
-                        // }
-                        // else {
-                        //     root.l.insert(idx, order)
-                        // }
-                        // 向左方前进，前进前确定对应节点是否存在，以及节点是否是 buddy 
                         if root.l.0.is_some() && order.ptr_to_idx(root.l.0.unwrap()) == idx ^ 1 {
 
                             // if delete node is not leaf => delete link
@@ -404,25 +398,28 @@ impl Tree {
                             match (node.l.0.is_some(), node.r.0.is_some()) {
                                 (true, true) => {
                                     // have both left and right subtree
-                                    // TODO 能否判断出最高子树是哪个    
-                                    // 左子树
                                     if node.l.height() < node.r.height() {
-                                        // 找到距离右子树最小节点最近的节点
-
+                                        // right tree higher than left tree
+                                        // node:    the point you want to delete
+                                        // byond:   the point byond the leaf
+                                        //    [A]   (root)  |     [A]
+                                        //    /             |    /   
+                                        //   [B] (node)     |   [E]
+                                        //   / \            |   / \
+                                        //  [C] [D](byond)  | [C] [D]
+                                        //      /           |       \
+                                        // (E:leaf)         |        [F]
+                                        //     \
+                                        //     [F]
                                         if node.l.height() == 1 {
+                                            // left subtree is leaf => delete node
                                             let leaf = unsafe { node.l.0.unwrap().as_mut() };
                                             leaf.r = Tree(node.r.0);
                                             root.r = Tree(NonNull::new(leaf));
                                         } else {
+                                            // left subtree has subtree => delete link and relink this link to it's parent then delete node
                                             let mut beyond = unsafe { find_min(&node.r.0.unwrap()).as_mut() };
                                             let leaf = unsafe { beyond.l.0.unwrap().as_mut() };
-                                            
-                                            // 如果最大节点存在反方向子树
-                                            //      [A] (beyond)    |   [A]
-                                            //     /                |   /
-                                            //    [B]   (leaf)      |  [C]
-                                            //      \               |
-                                            //      [C]             |
                                             if leaf.r.0.is_some() {
                                                 beyond.l = Tree(leaf.r.0);
                                                 leaf.r = Tree(None);
@@ -432,20 +429,18 @@ impl Tree {
                                             root.l = Tree(NonNull::new(leaf));
                                             leaf.update();
                                         }
-                                        // let mut leaf_point = find_min(&node.r.0.unwrap());
-                                        // let mut leaf = unsafe { leaf_point.as_mut() } ;
-                                        // if leaf.r.0.is_some() {
-                                        //     leaf.r = Tree(node.r.0);
-                                        //     node.r = Tree(None);
-                                        // }
-                                        // if node.l.0.is_some() {
-                                        //     leaf.l = Tree(node.l.0);
-                                        //     node.l = Tree(None);
-                                        // }
-                                        // root.l = Tree(Some(leaf_point));
                                     }
                                     else {
-                                        // 找到距离左子树最大节点最近的节点
+                                        // left tree higher than right subtree
+                                        //      [A] (root)  |      [A]
+                                        //     /            |       / 
+                                        // . [B] (node)     |      [E]
+                                        //    /       \     |      /  \
+                                        //  [C](byond)[D]   |    [C]  [D]
+                                        //    \             |     \
+                                        //    [E] (leaf)    |     [F]
+                                        //     \
+                                        //      [F]// 找到距离左子树最大节点最近的节点
 
                                         if node.r.height() == 1 {
                                             let leaf = unsafe { node.r.0.unwrap().as_mut() };
@@ -466,28 +461,28 @@ impl Tree {
                                             root.l = Tree(NonNull::new(leaf));
                                             leaf.update(); 
                                         }
-                                        // let mut leaf_point = find_max(&node.l.0.unwrap());
-                                        // let mut leaf = unsafe { leaf_point.as_mut() };
-                                        // // TODO 逻辑错误？
-                                        // if leaf.l.0.is_some() {
-                                        //     leaf.l = Tree(node.l.0);
-                                        //     node.l = Tree(None);
-                                        // }
-                                        // if node.r.0.is_some() {
-                                        //     leaf.r = Tree(node.r.0);
-                                        //     node.r = Tree(None);
-                                        // }
-                                        // root.l = Tree(Some(leaf_point));
                                     }
                                     root.l.rotate();
                                 },
                                 (true, false) => {
-                                    // have left node but not right
+                                    // have left but not right
+                                    //      [A] <- root |   [A]
+                                    //     /            |   /
+                                    //    [B] <- node   |  [C]
+                                    //    /             |   
+                                    //  [C]             |   
+                                    root.r = Tree(Some(node.l.0.unwrap()));
+                                    node.l = Tree(None);                                    // have left node but not right
                                     root.l = Tree(Some(node.l.0.unwrap()));
                                     node.l = Tree(None);
                                 },
                                 (false, true) => {
-                                    // have right node but not left
+                                    // have left but not right
+                                    //      [A] <- root |    [A]
+                                    //      /           |   /
+                                    //    [B] <- node   |  [C]
+                                    //      \           |   
+                                    //      [C]         | 这个地方不能直接上旋转，将节点转到叶子的原因是太麻烦了   // have right node but not left
                                     root.l = Tree(Some(node.r.0.unwrap()));
                                     node.l = Tree(None);
                                 },
@@ -499,6 +494,7 @@ impl Tree {
                             return false;
                         }
                         else {
+                            // 如果前进的方向不是 buddy 节点，则以递归方式继续进行插入，一直到达对应的位置(插入于空节点)
                             root.l.insert(idx, order)
                         }
                     },
@@ -507,7 +503,7 @@ impl Tree {
                 self.rotate();
                 ret
             },
-            // if this node is empty 
+            // if this node is empty => insert in this point
             None => {
                 self.0 = Some(ptr);
                 *unsafe { order.idx_to_ptr(idx).as_mut() } = Node {
@@ -534,17 +530,21 @@ impl Tree {
                 let ret = match (root.l.0.is_some(), root.r.0.is_some()) {
                     (true, true) => {
                         // have both left and right subtree
+                        // 如果某个方向只剩下一个节点，则直接删除这个节点，并且返回对应信息
+                        // 否则以递归方式继续进行
                         // 这个地方实际上主要目的在于减少代码量...但是反而带来了可读性的降低
                         match (root.l.height() < root.r.height(), core::cmp::min(root.l.height(), root.r.height())) {
                             (true, 1) => {
                                 let node = order.ptr_to_idx(root.l.0.unwrap());
                                 root.l = Tree(None);
+                                root.update();
                                 return Some(node)
                             },
                             (true, _) => root.l.delete(order),
                             (false, 1) => {
                                 let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
+                                root.update();
                                 return Some(node)
                             },
                             (false, _) => root.l.delete(order),
@@ -554,11 +554,12 @@ impl Tree {
                         // only have left subtree
                         match root.l.height() {
                             1 => {
-                                let node = order.ptr_to_idx(root.r.0.unwrap());
+                                let node = order.ptr_to_idx(root.l.0.unwrap());
                                 root.l = Tree(None);
+                                root.update();
                                 return Some(node)
                             },
-                            _ => root.r.delete(order),
+                            _ => root.l.delete(order),
                         }
                     },
                     (false, true) => {
@@ -567,9 +568,10 @@ impl Tree {
                             1 => {
                                 let node = order.ptr_to_idx(root.r.0.unwrap());
                                 root.r = Tree(None);
+                                root.update();
                                 return Some(node)
                             },
-                            _ => root.l.delete(order),
+                            _ => root.r.delete(order),
                         }
                     },
                     (false, false) => {
@@ -683,7 +685,7 @@ mod test {
     
     /// 256 MiB
     static mut MEMORY: [Page; 1024] = [Page::ZERO; 1024];
-    // 彼此之间要间隔开至少24个数字
+    // 彼此之间要间隔开至少24个数字以防止某种程度上的冲突
     // NonNull<Node>: 8; Node: 24; u8:1
     // 0  64  128  192  256  320  384  448  512  576  640  704  768  832  896  960
     fn create_nonnull_list() -> Vec<NonNull<Node>> {
@@ -694,8 +696,8 @@ mod test {
         println!("num\tidx\t\tptr");
         for i in 0..list.len() {
             print!("> {i}:\t");
-            print!("{:#x?}\t", (list[i].as_ptr() as usize) >> ORDER_LEVEL);
-            println!("{:#x?}", (list[i].as_ptr() as usize));
+            println!("{:#x?}\t", (list[i].as_ptr() as usize) >> ORDER_LEVEL);
+            // println!("{:#x?}", (list[i].as_ptr() as usize));
         }
         list
     }
@@ -913,8 +915,6 @@ mod test {
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
     }
-    // #[test]
-    
     #[test]
     fn test_for_delete_root() {
         let vec = create_nonnull_list();
@@ -926,6 +926,41 @@ mod test {
         let a = <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0);
 
         assert_eq!(avl_buddy.tree.0, None);
+    }
+
+    // This test is not for testing, but checking tree action by manaual(due to different implement in selection)
+    fn test_for_insert_and_delete() {
+        let vec = create_nonnull_list();
+        let mut avl_buddy = AvlBuddy::EMPTY;
+        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
+
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[5].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
+
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[4].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[7].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[5].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[6].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[11].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[10].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[8].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        println!("{avl_buddy:#x?}");
+        assert_eq!(vec[9].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
+        assert_eq!(None, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0));
+        println!("{avl_buddy:#x?}");
     }
 
 }
