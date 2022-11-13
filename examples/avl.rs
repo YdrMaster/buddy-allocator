@@ -1,4 +1,5 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyError, AvlBuddy, UsizeBuddy};
+//！just using for avl tree test, trying to allocate and deallocate node by a different ways to make more node in one line at the same times
+use customizable_buddy::{BuddyAllocator, BuddyError, UsizeBuddy, AvlBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},
@@ -14,6 +15,7 @@ impl Page {
     const ZERO: Self = Self([0; 4096]);
 }
 
+const DIVICE_PIECE :usize = 2;
 /// 256 MiB
 static mut MEMORY: [Page; 65536] = [Page::ZERO; 65536];
 
@@ -32,7 +34,7 @@ fn main() -> Result<(), BuddyError> {
     );
     // 计时
     let t = Instant::now();
-    // 将地址空间放入分配器进行分配
+    // 将地址空间放入分配器进行分配【此时生成的结果应该是默认分配情况下的】
     unsafe { allocator.transfer(ptr, len) };
     println!("transfer {:?}", t.elapsed());
 
@@ -55,25 +57,58 @@ BEFORE
         debug_assert_eq!(layout.size(), size);
         *block = ptr.as_ptr();
     }
+    // let (ptr, size) = allocator.allocate_type::<Page>()?;
+    // debug_assert_eq!(layout.size(), size);
+    // blocks[i] = ptr.as_ptr();
+    // for i in 0..DIVICE_PIECE {
+    //     // 对于所有的blocks我们便利四次，但是由于LinkedList 和 AVL 都在同等情况下进行测试，因此不会因为循环过多的次数影响到输出的结果
+    //     let mut cnt = 0;
+    //     for j in 0..50 {
+    //         if cnt == i {
+    //             let (ptr, size) = allocator.allocate_type::<Page>()?;
+    //             debug_assert_eq!(layout.size(), size);
+    //             blocks[j] = ptr.as_ptr();
+    //         }
+    //         cnt += 1;
+    //         if cnt == DIVICE_PIECE {
+    //             cnt = 0;
+    //         }
+    //     }
+    // }
     let ta = t.elapsed();
 
-    // 由于将等同于分配空间大小的页面全部收回
+    // 呈现出全部都被收回的结果
     println!(
         "
 EMPTY
 {allocator:#x?}"
     );
 
-    // 感觉这个地方应该 有问题, 不应该总容量不变
     assert_eq!(len, allocator.capacity());
     assert_eq!(len - blocks.len() * layout.size(), allocator.free());
 
+    println!("here");
     let t = Instant::now();
-    for block in blocks.iter_mut() {
-        // 释放指针所指向的空间给分配器进行调配
-        allocator.deallocate(NonNull::new(*block).unwrap(), layout.size());
-        *block = null_mut();
-        // println!("{allocator:#x?}");
+    // for block in blocks.iter_mut() {
+    //     // 释放指针所指向的空间给分配器进行调配
+    //     allocator.deallocate(NonNull::new(*block).unwrap(), layout.size());
+    //     *block = null_mut();
+    //     // println!("{allocator:#x?}");
+    // }
+    for i in 0..DIVICE_PIECE {
+        let mut cnt = 0;
+        for j in 0..blocks.len() {
+            if cnt == i {
+                allocator.deallocate(NonNull::new(blocks[j]).unwrap(), layout.size());
+                blocks[i] = null_mut();
+            }
+            // println!("{:#x?} , cnt: {cnt:?}, i: {i:?}", blocks[j]);
+            cnt += 1;
+            if cnt == DIVICE_PIECE {
+                cnt = 0;
+            }
+        }
+        println!("{allocator:#x?}");
     }
     let td = t.elapsed();
 

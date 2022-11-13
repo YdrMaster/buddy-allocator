@@ -70,7 +70,6 @@ impl BuddyCollection for UsizeBuddy {
         loop {
             let mask = 1 << i;          
             if self.bits & mask == mask {
-                // 
                 self.bits &= !mask;
                 return Some(self.base + i);
             }
