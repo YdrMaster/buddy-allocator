@@ -1,4 +1,6 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection, LinkedListBuddy};
+use customizable_buddy::{
+    BuddyAllocator, BuddyCollection, BuddyLine, LinkedListBuddy, OligarchyCollection,
+};
 use std::{collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {

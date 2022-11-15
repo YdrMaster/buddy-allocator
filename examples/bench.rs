@@ -1,4 +1,4 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyError, AvlBuddy, UsizeBuddy};
+use customizable_buddy::{AvlBuddy, BuddyAllocator, BuddyError, UsizeBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},

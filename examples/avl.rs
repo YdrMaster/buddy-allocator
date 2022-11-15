@@ -1,5 +1,5 @@
 //！just using for avl tree test, trying to allocate and deallocate node by a different ways to make more node in one line at the same times
-use customizable_buddy::{BuddyAllocator, BuddyError, UsizeBuddy, AvlBuddy};
+use customizable_buddy::{AvlBuddy, BuddyAllocator, BuddyError, UsizeBuddy};
 use std::{
     alloc::Layout,
     ptr::{null_mut, NonNull},
@@ -15,7 +15,7 @@ impl Page {
     const ZERO: Self = Self([0; 4096]);
 }
 
-const DIVICE_PIECE :usize = 2;
+const DIVICE_PIECE: usize = 2;
 /// 256 MiB
 static mut MEMORY: [Page; 65536] = [Page::ZERO; 65536];
 

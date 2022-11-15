@@ -8,14 +8,13 @@
 #![deny(warnings, unstable_features, missing_docs)]
 
 // TODO mod avl;
+mod avl;
 mod bitmap;
 mod linked_list;
-mod avl;
 
+pub use avl::AvlBuddy;
 pub use bitmap::UsizeBuddy;
 pub use linked_list::LinkedListBuddy;
-pub use avl::AvlBuddy;
-
 
 use core::{alloc::Layout, fmt, num::NonZeroUsize, ptr::NonNull};
 
@@ -27,7 +26,7 @@ pub trait BuddyLine {
     /// 侵入式元数据的大小。
     const INTRUSIVE_META_SIZE: usize = 0;
 
-    /// 
+    ///
     const MIN_ORDER: usize;
 
     /// 伙伴分配器可能需要集合知道自己的阶数和基序号。

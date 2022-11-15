@@ -1,5 +1,5 @@
 //! 没有实现线程安全
-//! 
+//!
 //! ## 总体运算逻辑：
 //! 在进行存储的时候存在如下空间
 //!
@@ -30,7 +30,7 @@
 //!             IF 前进方向的下一个节点就是伙伴节点
 //!                 按照四种不同删除方式对于伙伴节点进行删除
 //!                     （其中对于要删除的节点同时存在左右子树的情况下，引入了别的函数，主要目的在于找到当前子树中最大或者最小的节点，clone并返回）
-//!             ELSE 
+//!             ELSE
 //!                 递归到下一个节点处继续进行插入
 //!             ENDIF
 //!     ENDIF
@@ -42,7 +42,7 @@
 //!             找到距离根节点最近的叶子节点进行删除[根据节点的高度信息]
 
 // AVL 算法
-// # 静止的 AVL 树左右子树的高度差的绝对值最大为 1  
+// # 静止的 AVL 树左右子树的高度差的绝对值最大为 1
 //
 // 如果如下的树是 AVL 树：
 //
@@ -246,7 +246,7 @@ fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
 }
 
 /// 以递归方式找到并返回距离最小子树最近的子树
-/// 
+///
 /// 注意：调用者需要考虑到可能传出节点存在反向子树的情况
 ///     在这个地方没有考虑到开始递归节点可能一开始就没有左子树的情况
 fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
@@ -265,7 +265,7 @@ fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
 
 impl Tree {
     /// 向当前节点处插入一个节点
-    /// 
+    ///
     /// 在碰到节点与伙伴节点同时存在的情况下，会删除伙伴节点并且返回false [插入失败]
     fn insert(&mut self, idx: usize, order: &Order) -> bool {
         // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
@@ -538,7 +538,8 @@ impl Tree {
                                             leaf.update();
                                             root.update();
                                         } else {
-                                            let mut beyond = unsafe { find_min(&node.r.0.unwrap()).as_mut() };
+                                            let mut beyond =
+                                                unsafe { find_min(&node.r.0.unwrap()).as_mut() };
                                             if let Some(mut leaf) = beyond.l.0 {
                                                 // 如果 beyond 存在左子树
                                                 let mut leaf = unsafe { leaf.as_mut() };
@@ -846,13 +847,11 @@ mod test {
     // 彼此之间要间隔开至少24个数字以防止某种程度上的冲突
     // NonNull<Node>: 8; Node: 24; u8:1
     // 0  64  128  192  256  320  384  448  512  576  640  704  768  832  896  960
-    fn create_nonnull_list() -> [NonNull::<Node>; 1024/64] {
+    fn create_nonnull_list() -> [NonNull<Node>; 1024 / 64] {
         // let mut list = Vec::new();
-        let mut list = [NonNull::<Node>::dangling(); 1024/64];
+        let mut list = [NonNull::<Node>::dangling(); 1024 / 64];
         for i in 0..1024 / 64 {
-            list[i] = unsafe {
-                NonNull::new_unchecked(MEMORY[i * 64].0.as_mut_ptr() as *mut Node)
-            };
+            list[i] = unsafe { NonNull::new_unchecked(MEMORY[i * 64].0.as_mut_ptr() as *mut Node) };
         }
         /* DEBUG
         println!("num\tidx\t\tptr");
@@ -875,16 +874,31 @@ mod test {
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() },
+            vec[7]
+        );
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_r() {
@@ -893,16 +907,31 @@ mod test {
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() },
+            vec[7]
+        );
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_lr() {
@@ -911,16 +940,31 @@ mod test {
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() },
+            vec[7]
+        );
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_rl() {
@@ -929,14 +973,29 @@ mod test {
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
 
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() },
+            vec[7]
+        );
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     /* TEST FOR BUDDY OPERATION: DELETE BUDDY NODE AND NOT INSERT */
     #[test]
@@ -964,15 +1023,27 @@ mod test {
 
         let buddy_idx = ((vec[7].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0 }, None);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0 }, None);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_buddy_right_leaf() {
@@ -983,15 +1054,27 @@ mod test {
 
         let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[7].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0 }, None);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() },
+            vec[7]
+        );
+        assert_eq!(unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0 }, None);
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_right_only() {
@@ -1002,16 +1085,34 @@ mod test {
 
         let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[6].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[4].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[10].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[10]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[10]
+        );
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_left_only() {
@@ -1022,17 +1123,35 @@ mod test {
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[6].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[10].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[4].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_both_no_subleaf() {
@@ -1043,17 +1162,38 @@ mod test {
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[6].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[10].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[4].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[11].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[9]
+        );
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_both_with_subleaf() {
@@ -1064,19 +1204,46 @@ mod test {
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
         // println!("{buddy_idx:#x?}");
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[12].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[2].as_ptr() as usize) >> ORDER_LEVEL);
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[6].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[10].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[4].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[9].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[12].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[2].as_ptr() as usize) >> ORDER_LEVEL,
+        );
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[11].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
         // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
+        assert_eq!(
+            unsafe { avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() },
+            vec[11]
+        );
     }
     #[test]
     fn test_for_delete_root() {
@@ -1085,10 +1252,12 @@ mod test {
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
+        <AvlBuddy as BuddyCollection>::put(
+            &mut avl_buddy,
+            (vec[8].as_ptr() as usize) >> ORDER_LEVEL,
+        );
         let a = <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0);
 
         assert_eq!(avl_buddy.tree.0, None);
     }
-
 }
