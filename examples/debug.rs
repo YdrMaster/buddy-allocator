@@ -1,8 +1,10 @@
-﻿use customizable_buddy::{BuddyAllocator, BuddyCollection, BuddyLine, OligarchyCollection};
+use customizable_buddy::{
+    BuddyAllocator, BuddyCollection, BuddyLine, LinkedListBuddy, OligarchyCollection,
+};
 use std::{collections::BTreeSet, fmt, mem::MaybeUninit, ptr::NonNull};
 
 fn main() {
-    let mut allocator = BuddyAllocator::<16, BuddySet, BuddySet>::new();
+    let mut allocator = BuddyAllocator::<16, BuddySet, LinkedListBuddy>::new();
     allocator.init(12, non_null(0x1000));
     println!();
     assert!(allocator.allocate_type::<usize>().is_err());
@@ -43,6 +45,7 @@ struct BuddySet {
 }
 
 impl BuddyLine for BuddySet {
+    const MIN_ORDER: usize = 0;
     const EMPTY: Self = Self {
         set: MaybeUninit::uninit(),
         order: 0,

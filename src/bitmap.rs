@@ -1,4 +1,4 @@
-﻿use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
+use crate::{BuddyCollection, BuddyLine, OligarchyCollection};
 use core::fmt;
 
 /// 用一个 usize 作为位图保存占用情况的伙伴行。
@@ -23,6 +23,7 @@ impl UsizeBuddy {
 }
 
 impl BuddyLine for UsizeBuddy {
+    const MIN_ORDER: usize = 0;
     const EMPTY: Self = Self { bits: 0, base: 0 };
 
     #[inline]

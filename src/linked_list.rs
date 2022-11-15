@@ -11,6 +11,7 @@ pub struct LinkedListBuddy {
 unsafe impl Send for LinkedListBuddy {}
 
 impl BuddyLine for LinkedListBuddy {
+    const MIN_ORDER: usize = 0;
     const INTRUSIVE_META_SIZE: usize = core::mem::size_of::<Node>();
 
     const EMPTY: Self = Self {
@@ -36,12 +37,14 @@ impl OligarchyCollection for LinkedListBuddy {
             // TODO 不支持
             None
         } else {
+            // 直接从中删除一个节点
             self.free_list
                 .take_any()
                 .map(|ptr| self.order.ptr_to_idx(ptr))
         }
     }
 
+    // 向头结点处插入一个节点
     #[inline]
     fn put(&mut self, idx: usize) {
         self.free_list
@@ -62,6 +65,7 @@ impl BuddyCollection for LinkedListBuddy {
         }
     }
 
+    // 向对应位置插入一个新的元素
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 伙伴和当前结点存在链表的同一个位置。
         let node = unsafe { self.order.idx_to_ptr(idx) };
