@@ -1,5 +1,6 @@
 //! 没有实现线程安全
-//! 运算逻辑：
+//! 
+//! ## 总体运算逻辑：
 //! 在进行存储的时候存在如下空间
 //!
 //! 空间序号：1,2,3,4,5,6,7,8
@@ -14,14 +15,34 @@
 //! 此时的想法在于添加一个新的函数，其主要作用在于删除一个制定ptr的节点（已经确定存在）通过这种方式来实现对于兄弟节点的回收
 //! 同时，在完成回收之后，将两个兄弟节点中的最小的节点返回给上一级（并且插入到上一级的avl树中）
 //!
-//! 同时，从总体上来说：在某一层删除一个节点其实相当于从avl树中获取一个节点（按照我目前的算法来说，只有删除的idx是根节点才会出错）
+//! 同时，从总体上来说：在某一层删除一个节点其实相当于从avl树中获取一个节点
 //! 在如果在某一层没有找到对应元素，则向其上一层进行借用，在借用完成的时候再将其中的一部分插入到下一层的位置（这个地方按照lib是可以递归的）
 //! **层级代表着size**
 //!
-//! 目前更倾向与将代表着上一层的元素保留，而先分配另外一个
+//! ## 算法设计：
+//! 整体的算法逻辑如下 [开启了删除伙伴节点方案]
+//! 插入：
+//!     IF 插入节点为空：
+//!         直接插入
+//!     ELSE:
+//!         判断当前节点以及插入节点的伙伴节点之间的关系以获取下一步的前进方向:
+//!             分成三种情况进行讨论，比当前节点小，大，以及相等
+//!             IF 前进方向的下一个节点就是伙伴节点
+//!                 按照四种不同删除方式对于伙伴节点进行删除
+//!                     （其中对于要删除的节点同时存在左右子树的情况下，引入了别的函数，主要目的在于找到当前子树中最大或者最小的节点，clone并返回）
+//!             ELSE 
+//!                 递归到下一个节点处继续进行插入
+//!             ENDIF
+//!     ENDIF
+//! 删除：
+//!     IF 当前节点为空：
+//!         返回None
+//!     ELSE:
+//!         根据高度以及当前节点是否存在左右子树的情况，分成四种情况
+//!             找到距离根节点最近的叶子节点进行删除[根据节点的高度信息]
 
 // AVL 算法
-// # 静止的 AVL 树左右子树的高度差的绝对值最大为 1
+// # 静止的 AVL 树左右子树的高度差的绝对值最大为 1  
 //
 // 如果如下的树是 AVL 树：
 //
@@ -60,6 +81,7 @@ pub struct AvlBuddy {
     order: Order,
 }
 
+// UNUSED
 // #[allow(dead_code)]
 // impl AvlBuddy {
 //     #[inline]
@@ -97,12 +119,13 @@ impl OligarchyCollection for AvlBuddy {
 
     #[inline]
     fn put(&mut self, _idx: usize) {
+        // 个人感觉基于寡头行的数量而言，实现这个没有效率
         todo!()
     }
 }
 
 impl BuddyCollection for AvlBuddy {
-    // get a node from avl_buddy
+    // 从 avl_buddy 行内分配器中获取获取一个节点
     fn take_any(&mut self, _align_order: usize) -> Option<usize> {
         // 默认以相同大小进行分配我感觉是比较好的，但是不排除后面修改了想法
         // TODO 需要考虑是否进行边界判断
@@ -131,7 +154,6 @@ impl BuddyCollection for AvlBuddy {
 impl fmt::Debug for AvlBuddy {
     /// 以序列化前序遍历的方式输出
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // todo!("这个地方需要考虑到对于二叉搜索树的便利情况，可能比较难完成")
         // 这个地方我认为相对来说较难复现前面的算法,即使用层序便利对于结果进行呈现,可能需要采用标准搜索方案来对于结果进行呈现
         // 同时由于在trait外部实现dfs算法相对比较困难(感觉会造成割裂感),因此采用内部函数递归来实现这个操作
         write!(f, "[")?;
@@ -169,16 +191,16 @@ impl fmt::Debug for AvlBuddy {
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.l.0.is_some() {
-            write!(f, "l:{:#x?} ", self.l.0.unwrap().as_ptr() as usize)?;
-        }
-        else {
-            write!(f, "l:null ")?;
+            write!(f, "l:{:#x?}", self.l.0.unwrap().as_ptr() as usize)?;
+            write!(f, "[{:?}] ", unsafe { self.l.0.unwrap().as_ref().h })?;
+        } else {
+            write!(f, "l:null             ")?;
         }
         if self.r.0.is_some() {
-            write!(f, "r:{:#x?} ", self.r.0.unwrap().as_ptr() as usize)?;
-        }
-        else {
-            write!(f, "r:null ")?;
+            write!(f, "r:{:#x?}", self.r.0.unwrap().as_ptr() as usize)?;
+            write!(f, "[{:?}] ", unsafe { self.r.0.unwrap().as_ref().h })?;
+        } else {
+            write!(f, "r:null             ")?;
         }
         write!(f, "h:{}", self.h)
     }
@@ -188,13 +210,11 @@ impl fmt::Debug for Tree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_some() {
             write!(f, "{:?}", self.0.unwrap())
-        }
-        else {
+        } else {
             write!(f, "null")
         }
     }
 }
-
 
 #[repr(transparent)]
 struct Tree(Option<NonNull<Node>>);
@@ -207,10 +227,12 @@ struct Node {
 }
 
 /// 以递归方式找到距离传入子树最大节点最近的子树节点
+///
 /// 注意：调用者需要考虑到传出节点可能存在反向子树的情况
+///     这个地方没有考虑到开始递归节点处可能在一开始就没有右子树的情况
 fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
     // 需要考虑到有左子树的情况
-    //  [A]    
+    //  [A]
     //    \
     //     [B] (node.r)
     //    /
@@ -224,10 +246,12 @@ fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
 }
 
 /// 以递归方式找到并返回距离最小子树最近的子树
+/// 
 /// 注意：调用者需要考虑到可能传出节点存在反向子树的情况
+///     在这个地方没有考虑到开始递归节点可能一开始就没有左子树的情况
 fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
     // 需要考虑有右子树的情况
-    //    [a]          
+    //    [a]
     //    /
     //   [b]            (min point)
     //    \
@@ -240,7 +264,9 @@ fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
 }
 
 impl Tree {
-    /// 找到并返回距离最大子树最近的子树
+    /// 向当前节点处插入一个节点
+    /// 
+    /// 在碰到节点与伙伴节点同时存在的情况下，会删除伙伴节点并且返回false [插入失败]
     fn insert(&mut self, idx: usize, order: &Order) -> bool {
         // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
 
@@ -288,10 +314,11 @@ impl Tree {
                                             root.update();
                                         } else {
                                             // right subtree has subtree => delete link and relink this link to it's parent then delete node
-                                            let mut beyond = unsafe { find_min(&node.l.0.unwrap()).as_mut() };
+                                            let mut beyond =
+                                                unsafe { find_min(&node.r.0.unwrap()).as_mut() };
 
                                             if let Some(mut leaf) = beyond.l.0 {
-                                                // 如果 beyond 存在左节点 
+                                                // 如果 beyond 存在左节点
                                                 let leaf = unsafe { leaf.as_mut() };
 
                                                 // 如果 leaf 存在反方向节点
@@ -305,7 +332,7 @@ impl Tree {
                                                 leaf.r = Tree(node.r.0);
                                                 root.r = Tree(NonNull::new(leaf));
                                                 leaf.update();
-                                                root.update();    
+                                                root.update();
                                             } else {
                                                 // 将 beyond 作为 leaf 替换 node 的位置
                                                 beyond.l = Tree(node.l.0);
@@ -338,7 +365,8 @@ impl Tree {
                                         } else {
                                             #[allow(unused_variables, unused_mut, dead_code)]
                                             // left subtree has subtree => delete link and relink this link to it's parent then delete node
-                                            let mut beyond = unsafe { find_max(&node.l.0.unwrap()).as_mut() };
+                                            let mut beyond =
+                                                unsafe { find_max(&node.l.0.unwrap()).as_mut() };
 
                                             if let Some(mut leaf) = beyond.r.0 {
                                                 // 如果 beyond 存在右子树【这个实际上是为了弥补 find_max 中无法获取这种情况下距离最大节点最近的节点设计的】
@@ -348,8 +376,7 @@ impl Tree {
                                                 if leaf.l.0.is_some() {
                                                     beyond.r = Tree(leaf.l.0);
                                                     leaf.l = Tree(None);
-                                                }
-                                                else {
+                                                } else {
                                                     beyond.r = Tree(None);
                                                 }
                                                 leaf.l = Tree(node.l.0);
@@ -360,7 +387,7 @@ impl Tree {
                                             } else {
                                                 // 将 beyond 作为 leaf 替换 node 的位置
                                                 beyond.r = Tree(node.r.0);
-                                                root.r = Tree(NonNull::new(beyond));   
+                                                root.r = Tree(NonNull::new(beyond));
                                                 beyond.update();
                                                 root.update();
                                             }
@@ -403,9 +430,7 @@ impl Tree {
                         }
                     }
                     Equal => {
-                        // 个人感觉这个地方只可能出现在根节点处，因此一旦出现，则置当前节点为空
-                        // self.0 = None;
-                        // return true
+                        // 个人感觉这个地方只可能出现在根节点处
                         match (root.l.0.is_some(), root.r.0.is_some()) {
                             (true, true) => {
                                 match (
@@ -422,22 +447,9 @@ impl Tree {
                                     }
                                     (true, _) => {
                                         // right higher that left
-                                        // let mut beyond =
-                                        //     unsafe { find_min(&root.r.0.unwrap()).as_mut() };
-                                        // let mut leaf = unsafe { beyond.l.0.unwrap().as_mut() };
-                                        // if leaf.r.0.is_some() {
-                                        //     beyond.l = Tree(leaf.r.0);
-                                        //     leaf.r = Tree(None);
-                                        // } else {
-                                        //     beyond.l = Tree(None);
-                                        // }
-                                        // leaf.l = Tree(root.l.0);
-                                        // leaf.r = Tree(root.r.0); // BC 高度一定大于1,因此不会出现循环的情况
-                                        // self.0 = NonNull::new(leaf);
-                                        // leaf.update();
+                                        let mut beyond =
+                                            unsafe { find_min(&root.r.0.unwrap()).as_mut() };
 
-                                        let mut beyond = unsafe { find_min(&root.r.0.unwrap()).as_mut() };
-                                        
                                         if let Some(mut leaf) = beyond.l.0 {
                                             let leaf = unsafe { leaf.as_mut() };
 
@@ -451,8 +463,7 @@ impl Tree {
                                             leaf.r = Tree(root.r.0);
                                             self.0 = NonNull::new(leaf);
                                             leaf.update();
-                                        }
-                                        else {
+                                        } else {
                                             // 取右边最高节点出来作为root
                                             let mut right = unsafe { root.r.0.unwrap().as_mut() };
                                             right.l = Tree(root.l.0);
@@ -462,20 +473,8 @@ impl Tree {
                                     }
                                     (false, _) => {
                                         // left higher than right
-                                        // let mut beyond =
-                                        //     unsafe { find_max(&root.l.0.unwrap()).as_mut() };
-                                        // let mut leaf = unsafe { beyond.r.0.unwrap().as_mut() };
-                                        // if leaf.l.0.is_some() {
-                                        //     beyond.r = Tree(leaf.l.0);
-                                        //     leaf.l = Tree(None);
-                                        // } else {
-                                        //     beyond.r = Tree(None);
-                                        // }
-                                        // leaf.l = Tree(root.l.0);
-                                        // leaf.r = Tree(root.r.0);
-                                        // self.0 = NonNull::new(leaf);
-                                        // leaf.update();
-                                        let mut beyond = unsafe { find_max(&root.l.0.unwrap()).as_mut() };
+                                        let mut beyond =
+                                            unsafe { find_max(&root.l.0.unwrap()).as_mut() };
                                         if let Some(mut leaf) = beyond.r.0 {
                                             let leaf = unsafe { leaf.as_mut() };
 
@@ -495,7 +494,6 @@ impl Tree {
                                             self.0 = NonNull::new(left);
                                             left.update()
                                         }
-
                                     }
                                 }
                             }
@@ -510,7 +508,6 @@ impl Tree {
                                 return false;
                             }
                         };
-
                         false
                     }
                     Greater => {
@@ -542,11 +539,10 @@ impl Tree {
                                             root.update();
                                         } else {
                                             let mut beyond = unsafe { find_min(&node.r.0.unwrap()).as_mut() };
-                                            
                                             if let Some(mut leaf) = beyond.l.0 {
                                                 // 如果 beyond 存在左子树
                                                 let mut leaf = unsafe { leaf.as_mut() };
-                                                
+
                                                 // 如果存在反方向子树
                                                 if leaf.r.0.is_some() {
                                                     beyond.l = Tree(leaf.r.0);
@@ -561,8 +557,7 @@ impl Tree {
 
                                                 leaf.update();
                                                 root.update();
-                                            }
-                                            else {
+                                            } else {
                                                 // 将 beyond 作为 leaf 替换 node
                                                 beyond.l = Tree(node.l.0);
                                                 root.l = Tree(NonNull::new(beyond));
@@ -592,21 +587,8 @@ impl Tree {
                                             root.update();
                                         } else {
                                             // left subtree has subtree => delete link and relink this link to it's parent then delete node
-                                            // let mut beyond = unsafe { find_min(&node.l.0.unwrap()).as_mut() };
-                                            // dbg!("{:?}", &beyond);
-                                            // let leaf = unsafe { beyond.r.0.unwrap().as_mut() };
-                                            // if leaf.l.0.is_some() {
-                                            //     beyond.r = Tree(leaf.l.0);
-                                            //     leaf.l = Tree(None);
-                                            // } else {
-                                            //     beyond.r = Tree(None);
-                                            // }
-                                            // leaf.l = Tree(node.l.0);
-                                            // leaf.r = Tree(node.r.0);
-                                            // root.l = Tree(NonNull::new(leaf));
-                                            // leaf.update();
-                                            // root.update();
-                                            let mut beyond = unsafe { find_max(&node.l.0.unwrap()).as_mut() };
+                                            let mut beyond =
+                                                unsafe { find_max(&node.l.0.unwrap()).as_mut() };
                                             if let Some(mut leaf) = beyond.r.0 {
                                                 let leaf = unsafe { leaf.as_mut() };
 
@@ -647,7 +629,7 @@ impl Tree {
                                     //      /           |   /
                                     //    [B] <- node   |  [C]
                                     //      \           |
-                                    //      [C]         | 这个地方不能直接上旋转，将节点转到叶子的原因是太麻烦了   // have right node but not left
+                                    //      [C]         |
                                     root.l = Tree(Some(node.r.0.unwrap()));
                                     node.l = Tree(None);
                                     node.update();
@@ -666,6 +648,7 @@ impl Tree {
                     }
                 };
                 root.update();
+                unsafe { self.0.unwrap().as_mut() }.update();
                 self.rotate();
                 ret
             }
@@ -770,14 +753,14 @@ impl Tree {
         let root = unsafe { self.0.unwrap().as_mut() };
         let bf = root.bf();
         if bf > 1 {
-            if unsafe { root.l.0.unwrap().as_mut() }.bf() > 0 {
+            if unsafe { root.l.0.unwrap().as_mut() }.bf() >= 0 {
                 self.rotate_r();
             } else {
                 root.l.rotate_l();
                 self.rotate_r();
             }
         } else if bf < -1 {
-            if unsafe { root.r.0.unwrap().as_mut() }.bf() < 0 {
+            if unsafe { root.r.0.unwrap().as_mut() }.bf() <= 0 {
                 self.rotate_l();
             } else {
                 root.r.rotate_r();
@@ -859,22 +842,26 @@ mod test {
 
     /// 256 MiB
     static mut MEMORY: [Page; 1024] = [Page::ZERO; 1024];
+
     // 彼此之间要间隔开至少24个数字以防止某种程度上的冲突
     // NonNull<Node>: 8; Node: 24; u8:1
     // 0  64  128  192  256  320  384  448  512  576  640  704  768  832  896  960
-    fn create_nonnull_list() -> Vec<NonNull<Node>> {
-        let mut list = Vec::new();
+    fn create_nonnull_list() -> [NonNull::<Node>; 1024/64] {
+        // let mut list = Vec::new();
+        let mut list = [NonNull::<Node>::dangling(); 1024/64];
         for i in 0..1024 / 64 {
-            list.push(unsafe {
+            list[i] = unsafe {
                 NonNull::new_unchecked(MEMORY[i * 64].0.as_mut_ptr() as *mut Node)
-            });
+            };
         }
+        /* DEBUG
         println!("num\tidx\t\tptr");
         for i in 0..list.len() {
             print!("> {i}:\t");
             println!("{:#x?}\t", (list[i].as_ptr() as usize) >> ORDER_LEVEL);
             // println!("{:#x?}", (list[i].as_ptr() as usize));
         }
+        */
         list
     }
 
@@ -884,7 +871,7 @@ mod test {
     #[test]
     fn test_for_insert_l() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
@@ -894,7 +881,7 @@ mod test {
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
@@ -902,7 +889,7 @@ mod test {
     #[test]
     fn test_for_insert_r() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
@@ -912,7 +899,7 @@ mod test {
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
@@ -920,7 +907,7 @@ mod test {
     #[test]
     fn test_for_insert_lr() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
@@ -930,7 +917,7 @@ mod test {
         // <avlbuddy as buddycollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> order_level);
 
         // let a = unsafe { &avl_buddy.tree.0.unwrap().as_ref().l};
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
@@ -938,7 +925,7 @@ mod test {
     #[test]
     fn test_for_insert_rl() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
@@ -946,7 +933,7 @@ mod test {
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
 
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
@@ -955,34 +942,34 @@ mod test {
     #[test]
     fn test_for_insert_buddy_root() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let root_idx = (vec[7].as_ptr() as usize) >> ORDER_LEVEL;
         let buddy_idx = ((vec[7].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{root_idx:#x?}\t{buddy_idx:#x?}");
+        // println!("{root_idx:#x?}\t{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, root_idx);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0, None);
     }
     #[test]
     fn test_for_insert_buddy_left_leaf() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[7].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0 }, None);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
@@ -990,18 +977,18 @@ mod test {
     #[test]
     fn test_for_insert_buddy_right_leaf() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().l.0.unwrap() }, vec[7]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0 }, None);
@@ -1009,74 +996,74 @@ mod test {
     #[test]
     fn test_for_insert_buddy_right_not_leaf_right_only() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[9].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[10]);
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_left_only() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
 
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_both_no_subleaf() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
-        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
+        assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[9]);
     }
     #[test]
     fn test_for_insert_buddy_right_not_leaf_both_with_subleaf() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
         let buddy_idx = ((vec[10].as_ptr() as usize) >> ORDER_LEVEL) ^ 1;
-        println!("{buddy_idx:#x?}");
+        // println!("{buddy_idx:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
@@ -1085,16 +1072,16 @@ mod test {
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[12].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[2].as_ptr() as usize) >> ORDER_LEVEL);
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, buddy_idx);
-        println!("{avl_buddy:#x?}");
+        // println!("{avl_buddy:#x?}");
         assert_eq!(avl_buddy.tree.0.unwrap(), vec[8]);
         assert_eq!( unsafe{ avl_buddy.tree.0.unwrap().as_ref().r.0.unwrap() }, vec[11]);
     }
     #[test]
     fn test_for_delete_root() {
         let vec = create_nonnull_list();
-        println!("{}", vec.len());
+        // println!("{}", vec.len());
         let mut avl_buddy = AvlBuddy::EMPTY;
         avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
 
@@ -1104,41 +1091,4 @@ mod test {
         assert_eq!(avl_buddy.tree.0, None);
     }
 
-    // This test is not for testing, but checking tree action by manaual(due to different implement in selection)
-    #[test]
-    fn test_for_insert_and_delete() {
-        let vec = create_nonnull_list();
-        let mut avl_buddy = AvlBuddy::EMPTY;
-        avl_buddy.init(ORDER_LEVEL, vec[0].as_ptr() as usize);
-
-        <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[6].as_ptr() as usize) >> ORDER_LEVEL);
-        let a = unsafe { avl_buddy.tree.0.unwrap().as_ref() };
-        println!("{:?}", a);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[4].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[5].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[8].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[9].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[7].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[10].as_ptr() as usize) >> ORDER_LEVEL);
-        // <AvlBuddy as BuddyCollection>::put(&mut avl_buddy, (vec[11].as_ptr() as usize) >> ORDER_LEVEL);
-
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[4].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[7].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[5].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[6].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[11].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[10].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[8].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // println!("{avl_buddy:#x?}");
-        // assert_eq!(vec[9].as_ptr() as usize >> ORDER_LEVEL, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0).unwrap());
-        // assert_eq!(None, <AvlBuddy as BuddyCollection>::take_any(&mut avl_buddy, 0));
-        // println!("{avl_buddy:#x?}");
-    }
 }
