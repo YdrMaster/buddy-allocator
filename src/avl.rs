@@ -217,9 +217,11 @@ impl fmt::Debug for Tree {
 }
 
 #[repr(transparent)]
+#[derive(Clone, Copy)]
 struct Tree(Option<NonNull<Node>>);
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct Node {
     l: Tree,
     r: Tree,
@@ -241,7 +243,8 @@ fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
         // if have right and it's right
         find_max(unsafe { &node.as_ref().r.0.unwrap() })
     } else {
-        node.clone()
+        *node
+        // NonNull::new(node.as_ptr()).unwrap()
     }
 }
 
@@ -259,7 +262,8 @@ fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
     if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
         find_min(unsafe { &node.as_ref().l.0.unwrap() })
     } else {
-        node.clone()
+        *node
+        // NonNull::new(node.as_ptr()).unwrap()
     }
 }
 
