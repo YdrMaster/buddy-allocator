@@ -23,7 +23,6 @@ impl UsizeBuddy {
 }
 
 impl BuddyLine for UsizeBuddy {
-    const MIN_ORDER: usize = 0;
     const EMPTY: Self = Self { bits: 0, base: 0 };
 
     #[inline]

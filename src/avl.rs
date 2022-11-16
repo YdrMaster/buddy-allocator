@@ -91,8 +91,7 @@ pub struct AvlBuddy {
 // }
 
 impl BuddyLine for AvlBuddy {
-    // 每个页上会保存一个 `Node`。
-    const MIN_ORDER: usize = core::mem::size_of::<Node>().trailing_zeros() as _;
+    const INTRUSIVE_META_SIZE: usize = core::mem::size_of::<Node>();
 
     const EMPTY: Self = Self {
         tree: Tree(None),
@@ -139,7 +138,7 @@ impl BuddyCollection for AvlBuddy {
     /// insert node into avl_buddy
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 需要额外考虑一个事情，就是在进行分配的时候，最小分配单元必须大于Node，因为这个Node实际上是存放在分配的空间中的，因此需要加入判定以确保空间不会出现重叠的情况
-        if self.order.0 >= <Self as BuddyLine>::MIN_ORDER && self.tree.insert(idx, &self.order) {
+        if self.tree.insert(idx, &self.order) {
             None
         } else {
             // find it's buddy

@@ -11,7 +11,6 @@ pub struct LinkedListBuddy {
 unsafe impl Send for LinkedListBuddy {}
 
 impl BuddyLine for LinkedListBuddy {
-    const MIN_ORDER: usize = 0;
     const INTRUSIVE_META_SIZE: usize = core::mem::size_of::<Node>();
 
     const EMPTY: Self = Self {

@@ -1,13 +1,8 @@
 //! 伙伴分配器。
-//! 每一行都相当于一个小的分配器
-//! 小的分配器会实现如下功能
-//!     take_any
-//!     put      从向其中的一个位置放入指定元素
 
 #![no_std]
 #![deny(warnings, unstable_features, missing_docs)]
 
-// TODO mod avl;
 mod avl;
 mod bitmap;
 mod linked_list;
@@ -25,9 +20,6 @@ pub trait BuddyLine {
 
     /// 侵入式元数据的大小。
     const INTRUSIVE_META_SIZE: usize = 0;
-
-    ///
-    const MIN_ORDER: usize;
 
     /// 伙伴分配器可能需要集合知道自己的阶数和基序号。
     #[inline]
