@@ -81,14 +81,8 @@ pub struct AvlBuddy {
     order: Order,
 }
 
-// UNUSED
-// #[allow(dead_code)]
-// impl AvlBuddy {
-//     #[inline]
-//     fn ptr_from(&self, idx: usize) -> NonNull<Node> {
-//         unsafe { NonNull::new_unchecked(((self.base + idx) << self.order) as *mut Node) }
-//     }
-// }
+/// 必须实现 [`Send`] 才能加锁。
+unsafe impl Send for AvlBuddy {}
 
 impl BuddyLine for AvlBuddy {
     const INTRUSIVE_META_SIZE: usize = core::mem::size_of::<Node>();
