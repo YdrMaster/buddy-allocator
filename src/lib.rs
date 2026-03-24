@@ -190,7 +190,7 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         }
 
         if let Some(size) = NonZeroUsize::new(layout.size()) {
-            self.allocate(layout.align().trailing_zeros() as _, size)
+            self.allocate(layout.align() as _, size)
         } else {
             Ok(allocated(self, 0))
         }
