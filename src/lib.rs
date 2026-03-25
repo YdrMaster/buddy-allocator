@@ -230,7 +230,8 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
         let (ptr, alloc_size) = if size_order >= max_order {
             // 连续分配寡头
             let count = ((ans_size >> (max_order - 1)) + 1) >> 1;
-            match self.oligarchy.take_any(align_order >> max_order, count) {
+            let align_offset = align_order.saturating_sub(max_order);
+            match self.oligarchy.take_any(align_offset, count) {
                 Some(idx) => (idx << max_order, count << max_order),
                 None => Err(BuddyError)?,
             }
@@ -241,13 +242,15 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             let mut idx = loop {
                 // 从寡头借
                 if layer == Self::MAX_LAYER {
-                    match self.oligarchy.take_any(align_order >> max_order, 1) {
+                    let align_offset = align_order.saturating_sub(max_order);
+                    match self.oligarchy.take_any(align_offset, 1) {
                         Some(idx) => break idx,
                         None => Err(BuddyError)?,
                     }
                 }
                 // 从伙伴借
-                match self.buddies[layer].take_any(align_order >> (self.min_order + layer)) {
+                let align_offset = align_order.saturating_sub(self.min_order + layer);
+                match self.buddies[layer].take_any(align_offset) {
                     Some(idx) => break idx,
                     None => layer += 1,
                 }
