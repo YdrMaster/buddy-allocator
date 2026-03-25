@@ -1,9 +1,14 @@
-﻿use crate::{BuddyCollection, BuddyLine, OligarchyCollection, Order};
+use crate::{BuddyCollection, BuddyLine, OligarchyCollection, Order};
 use core::{fmt, ptr::NonNull};
 
 /// 侵入式链表伙伴行。
+///
+/// 使用单向链表管理空闲内存块，适合管理小块内存。
+/// 不支持对齐分配，时间复杂度为 O(n)。
 pub struct LinkedListBuddy {
+    /// 空闲链表头节点。
     free_list: Node,
+    /// 当前阶数，用于指针和索引的转换。
     order: Order,
 }
 
@@ -24,8 +29,7 @@ impl BuddyLine for LinkedListBuddy {
     }
 
     fn take(&mut self, _idx: usize) -> bool {
-        // TODO 可以实现，但没有效率
-        unimplemented!("not efficient")
+        todo!("not efficient")
     }
 }
 
@@ -90,8 +94,12 @@ impl fmt::Debug for LinkedListBuddy {
     }
 }
 
+/// 链表节点。
+///
+/// 侵入式链表节点，直接存储在空闲内存块中。
 #[repr(transparent)]
 struct Node {
+    /// 下一个节点的指针。
     next: Option<NonNull<Node>>,
 }
 
@@ -136,7 +144,7 @@ impl Node {
     /// 直接在头结点插入。
     #[inline]
     fn insert_unordered(&mut self, mut node: NonNull<Node>) {
-        unsafe { node.as_mut() }.next = core::mem::replace(&mut self.next, Some(node));
+        unsafe { node.as_mut() }.next = self.next.replace(node);
     }
 
     /// 直接取下头结点。
@@ -145,5 +153,153 @@ impl Node {
         let root = self.next;
         self.next = root.and_then(|node| unsafe { node.as_ref().next });
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 为测试分配一些内存作为节点存储
+    #[repr(C, align(16))]
+    struct TestMemory {
+        data: [u8; 256],
+    }
+
+    #[test]
+    fn test_empty() {
+        let list = LinkedListBuddy::EMPTY;
+        assert!(list.free_list.next.is_none());
+    }
+
+    #[test]
+    fn test_init() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(3, 0);
+        // order 应该被设置为 3
+        assert_eq!(list.order.0, 3);
+    }
+
+    #[test]
+    fn test_insert_unordered() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(4, 0); // order=4
+
+        // 使用一个固定地址模拟节点
+        let mut memory = TestMemory { data: [0; 256] };
+        let node_ptr = NonNull::new(memory.data.as_mut_ptr().cast::<Node>()).unwrap();
+
+        // 将指针转换为索引，然后 put
+        let idx = list.order.ptr_to_idx(node_ptr);
+        OligarchyCollection::put(&mut list, idx);
+
+        // 链表不为空
+        assert!(list.free_list.next.is_some());
+    }
+
+    #[test]
+    fn test_take_and_put_buddy() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(4, 0); // order=4
+
+        // 使用一个固定地址模拟节点
+        let mut memory = TestMemory { data: [0; 256] };
+        let node_ptr = NonNull::new(memory.data.as_mut_ptr().cast::<Node>()).unwrap();
+
+        // 将指针转换为索引，然后 put
+        let idx = list.order.ptr_to_idx(node_ptr);
+        OligarchyCollection::put(&mut list, idx);
+
+        // 可以成功取出
+        let taken_idx = OligarchyCollection::take_any(&mut list, 0, 1);
+        assert_eq!(taken_idx, Some(idx));
+    }
+
+    #[test]
+    fn test_buddy_merge() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(4, 0); // order=4
+
+        // 使用两个地址作为伙伴节点（地址差为 1<<4 = 16）
+        let mut memory = TestMemory { data: [0; 256] };
+        let base = memory.data.as_mut_ptr() as usize;
+        // 确保 idx0 是偶数，这样 idx0 和 idx0^1 才是伙伴
+        let ptr0 = (base + 15) & !15; // 对齐到 16
+
+        // 转换为索引
+        let idx0 = ptr0 >> 4;
+
+        // 确保 idx0 是偶数
+        let idx0 = idx0 & !1; // 清除最低位
+        let idx1 = idx0 ^ 1; // 伙伴索引
+
+        // 先放入 idx0
+        OligarchyCollection::put(&mut list, idx0);
+        // 再放入 idx1（伙伴是 idx0），应该会触发合并
+        let result = BuddyCollection::put(&mut list, idx1);
+        // 应该触发合并，返回父节点索引 (idx0 >> 1)
+        assert_eq!(result, Some(idx0 >> 1));
+    }
+
+    #[test]
+    fn test_buddy_collection_take_any() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(0, 0);
+
+        // 空链表应该返回 None
+        assert_eq!(BuddyCollection::take_any(&mut list, 0), None);
+
+        // 不支持对齐
+        assert_eq!(BuddyCollection::take_any(&mut list, 1), None);
+    }
+
+    #[test]
+    fn test_oligarchy_collection_take_any() {
+        let mut list = LinkedListBuddy::EMPTY;
+        list.init(0, 0);
+
+        // 不支持多个块
+        assert_eq!(OligarchyCollection::take_any(&mut list, 0, 2), None);
+        // 不支持对齐
+        assert_eq!(OligarchyCollection::take_any(&mut list, 1, 1), None);
+    }
+
+    #[test]
+    fn test_node_insert() {
+        // 测试 Node::insert 方法
+        let mut head = Node { next: None };
+
+        let mut memory = TestMemory { data: [0; 256] };
+        let ptr1 = NonNull::new(memory.data.as_mut_ptr().cast::<Node>()).unwrap();
+        let ptr2 = NonNull::new(memory.data.as_mut_ptr().wrapping_add(16).cast::<Node>()).unwrap();
+        let ptr3 = NonNull::new(memory.data.as_mut_ptr().wrapping_add(32).cast::<Node>()).unwrap();
+
+        // 插入第一个节点
+        head.insert_unordered(ptr1);
+        assert!(head.next.is_some());
+
+        // 插入第二个节点
+        head.insert_unordered(ptr2);
+
+        // 使用 insert 尝试找到伙伴（不存在的伙伴）
+        let buddy = NonNull::new(memory.data.as_mut_ptr().wrapping_add(64).cast::<Node>()).unwrap();
+        assert!(head.insert(ptr3, buddy));
+    }
+
+    #[test]
+    fn test_node_take_any() {
+        let mut head = Node { next: None };
+
+        let mut memory = TestMemory { data: [0; 256] };
+        let ptr = NonNull::new(memory.data.as_mut_ptr().cast::<Node>()).unwrap();
+
+        head.insert_unordered(ptr);
+
+        // 取出一个节点
+        let taken = head.take_any();
+        assert!(taken.is_some());
+
+        // 再次取出应该返回 None
+        assert!(head.take_any().is_none());
     }
 }

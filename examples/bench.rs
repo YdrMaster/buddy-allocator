@@ -1,7 +1,7 @@
 use customizable_buddy::{AvlBuddy, BuddyAllocator, BuddyError, UsizeBuddy};
 use std::{
     alloc::Layout,
-    ptr::{null_mut, NonNull},
+    ptr::{NonNull, addr_of, addr_of_mut, null_mut},
     time::Instant,
 };
 
@@ -21,8 +21,8 @@ fn main() -> Result<(), BuddyError> {
     // 创建全局分配器
     let mut allocator = Allocator::<12>::new();
     // 从本机操作系统获取一块内存给程序
-    let ptr = NonNull::new(unsafe { MEMORY.as_mut_ptr() }).unwrap();
-    let len = core::mem::size_of_val(unsafe { &MEMORY });
+    let ptr = NonNull::new(addr_of_mut!(MEMORY).cast::<u8>()).unwrap();
+    let len = size_of_val(unsafe { &*addr_of!(MEMORY) });
     // 使用最小阶数和初始地址初始化程序
     allocator.init(12, ptr);
     println!(

@@ -69,10 +69,12 @@ impl OligarchyCollection for BuddySet {
         );
         assert!(count == 1);
         let set = unsafe { self.set.assume_init_mut() };
-        set.iter().next().copied().map(|i| {
+        if let Some(&i) = set.iter().next() {
             set.remove(&i);
-            i
-        })
+            Some(i)
+        } else {
+            None
+        }
     }
 
     fn put(&mut self, idx: usize) {
@@ -86,10 +88,12 @@ impl BuddyCollection for BuddySet {
     fn take_any(&mut self, align_order: usize) -> Option<usize> {
         println!("Buddies[{}] take 1 with align = {align_order}", self.order);
         let set = unsafe { self.set.assume_init_mut() };
-        set.iter().next().copied().map(|i| {
+        if let Some(&i) = set.iter().next() {
             set.remove(&i);
-            i
-        })
+            Some(i)
+        } else {
+            None
+        }
     }
 
     fn put(&mut self, idx: usize) -> Option<usize> {

@@ -64,21 +64,22 @@ pub struct BuddyError;
 
 /// 伙伴分配器。
 pub struct BuddyAllocator<const N: usize, O: OligarchyCollection, B: BuddyCollection> {
-    /// 寡头集合。
+    /// 寡头集合，管理最大阶数的内存块。
     oligarchy: O,
 
     /// `N` 阶 `B` 型伙伴集合。
+    /// `buddies[i]` 管理阶数为 `min_order + i` 的内存块。
     buddies: [B; N],
 
     /// 最小阶数。
     ///
-    /// `buddy[0]` 伙伴行分配的内存块的阶数。
+    /// `buddies[0]` 伙伴行分配的内存块的阶数。
     min_order: usize,
 
-    /// 空闲容量。
+    /// 空闲容量（字节）。
     free: usize,
 
-    /// 总容量。
+    /// 总容量（字节）。
     capacity: usize,
 }
 
@@ -101,7 +102,17 @@ impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<
             capacity: 0,
         }
     }
+}
 
+impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> Default
+    for BuddyAllocator<N, O, B>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize, O: OligarchyCollection, B: BuddyCollection> BuddyAllocator<N, O, B> {
     /// 返回分配器管理的总容量。
     #[inline]
     pub fn capacity(&self) -> usize {
@@ -368,11 +379,309 @@ impl Order {
 
     #[inline]
     unsafe fn idx_to_ptr<T>(&self, idx: usize) -> NonNull<T> {
-        NonNull::new_unchecked((idx << self.0) as *mut _)
+        unsafe { NonNull::new_unchecked((idx << self.0) as *mut _) }
     }
 
     #[inline]
     fn ptr_to_idx<T>(&self, ptr: NonNull<T>) -> usize {
         (ptr.as_ptr() as usize) >> self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{LinkedListBuddy, UsizeBuddy};
+
+    // 定义测试用的分配器类型
+    type TestAllocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, LinkedListBuddy>;
+
+    /// 测试内存区域，用于模拟堆内存
+    #[repr(C, align(4096))]
+    #[derive(Clone, Copy)]
+    struct TestPage([u8; 4096]);
+
+    static mut TEST_MEMORY: [TestPage; 16] = [TestPage([0; 4096]); 16];
+
+    #[test]
+    fn test_allocator_new() {
+        let allocator: TestAllocator<4> = BuddyAllocator::new();
+        assert_eq!(allocator.capacity(), 0);
+        assert_eq!(allocator.free(), 0);
+        assert_eq!(allocator.min_order, 0);
+    }
+
+    #[test]
+    fn test_allocator_default() {
+        let allocator: TestAllocator<4> = BuddyAllocator::default();
+        assert_eq!(allocator.capacity(), 0);
+        assert_eq!(allocator.free(), 0);
+    }
+
+    #[test]
+    fn test_allocator_init() {
+        let mut allocator: TestAllocator<4> = BuddyAllocator::new();
+
+        // 获取测试内存地址
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+
+        allocator.init(12, ptr);
+        assert_eq!(allocator.min_order, 12);
+        assert_eq!(allocator.capacity(), 0);
+        assert_eq!(allocator.free(), 0);
+    }
+
+    #[test]
+    fn test_allocator_transfer() {
+        let mut allocator: TestAllocator<4> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+
+        // 转移内存给分配器
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        assert_eq!(allocator.capacity(), len);
+        assert_eq!(allocator.free(), len);
+    }
+
+    #[test]
+    fn test_allocator_allocate_deallocate_basic() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        let initial_free = allocator.free();
+
+        // 分配一个 4KB 的块
+        let size = NonZeroUsize::new(4096).unwrap();
+        let (alloc_ptr, alloc_size) = allocator.allocate::<u8>(0, size).unwrap();
+
+        // 验证分配成功
+        assert!(alloc_size >= 4096);
+        assert!(allocator.free() < initial_free);
+
+        // 释放内存
+        allocator.deallocate(alloc_ptr, alloc_size);
+
+        // 验证释放后空闲空间恢复
+        assert_eq!(allocator.free(), initial_free);
+    }
+
+    #[test]
+    fn test_allocator_allocate_type() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        let initial_free = allocator.free();
+
+        // 分配一个 usize 大小的内存
+        let (alloc_ptr, alloc_size) = allocator.allocate_type::<usize>().unwrap();
+
+        // 验证分配成功
+        assert!(alloc_size >= core::mem::size_of::<usize>());
+
+        // 释放内存
+        allocator.deallocate(alloc_ptr, alloc_size);
+
+        assert_eq!(allocator.free(), initial_free);
+    }
+
+    #[test]
+    fn test_allocator_allocate_layout() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        let initial_free = allocator.free();
+
+        // 创建一个对齐要求为 8 的 layout
+        let layout = Layout::from_size_align(64, 8).unwrap();
+        let (alloc_ptr, alloc_size) = allocator.allocate_layout::<u8>(layout).unwrap();
+
+        // 验证分配成功
+        assert!(alloc_size >= 64);
+
+        // 释放内存
+        unsafe {
+            allocator.deallocate_layout(alloc_ptr, layout);
+        }
+
+        assert_eq!(allocator.free(), initial_free);
+    }
+
+    #[test]
+    fn test_allocator_multiple_allocations() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        let initial_free = allocator.free();
+
+        // 分配多个内存块
+        let size1 = NonZeroUsize::new(1024).unwrap();
+        let size2 = NonZeroUsize::new(2048).unwrap();
+        let size3 = NonZeroUsize::new(4096).unwrap();
+
+        let (ptr1, size1) = allocator.allocate::<u8>(0, size1).unwrap();
+        let (ptr2, size2) = allocator.allocate::<u8>(0, size2).unwrap();
+        let (ptr3, size3) = allocator.allocate::<u8>(0, size3).unwrap();
+
+        // 释放其中一个
+        allocator.deallocate(ptr2, size2);
+
+        // 释放剩余
+        allocator.deallocate(ptr1, size1);
+        allocator.deallocate(ptr3, size3);
+
+        assert_eq!(allocator.free(), initial_free);
+    }
+
+    #[test]
+    fn test_allocator_snatch() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        let initial_capacity = allocator.capacity();
+        let initial_free = allocator.free();
+
+        // 使用 snatch 分配内存，这会减少 capacity
+        let size = NonZeroUsize::new(4096).unwrap();
+        let (_alloc_ptr, alloc_size) = allocator.snatch::<u8>(0, size).unwrap();
+
+        // snatch 会减少 capacity 和 free
+        assert!(allocator.capacity() < initial_capacity);
+        assert_eq!(allocator.capacity(), initial_capacity - alloc_size);
+        assert_eq!(allocator.free(), initial_free - alloc_size);
+
+        // 注意：snatch 后不应该调用 deallocate，因为这会导致 free > capacity
+        // 这是 snatch 的语义：永久夺取内存，不再归还
+    }
+
+    #[test]
+    fn test_allocator_allocate_failure() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        // 尝试分配一个超过容量的块（应该失败）
+        // 使用一个合理的大值，避免溢出
+        let huge_size = NonZeroUsize::new(len * 2).unwrap();
+        assert!(allocator.allocate::<u8>(0, huge_size).is_err());
+    }
+
+    #[test]
+    fn test_allocator_zero_size_allocation() {
+        let mut allocator: TestAllocator<8> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+        let len = core::mem::size_of_val(unsafe { &*core::ptr::addr_of!(TEST_MEMORY) });
+
+        allocator.init(12, ptr);
+        unsafe {
+            allocator.transfer(ptr, len);
+        }
+
+        // 使用 allocate_layout 分配零大小
+        let layout = Layout::from_size_align(0, 1).unwrap();
+        let (_alloc_ptr, alloc_size) = allocator.allocate_layout::<u8>(layout).unwrap();
+
+        // 零大小分配应该返回非空指针但大小为 0
+        assert_eq!(alloc_size, 0);
+    }
+
+    #[test]
+    fn test_max_order() {
+        let mut allocator: TestAllocator<4> = BuddyAllocator::new();
+
+        let ptr = NonNull::new(core::ptr::addr_of_mut!(TEST_MEMORY).cast::<u8>()).unwrap();
+
+        allocator.init(3, ptr);
+
+        // max_order = min_order + MAX_LAYER = 3 + 4 = 7
+        assert_eq!(allocator.max_order(), 7);
+    }
+
+    #[test]
+    fn test_order_idx_to_ptr() {
+        let order = Order::new(12);
+
+        // 测试 idx 到 ptr 的转换
+        // idx=0 会生成空指针，所以从 1 开始
+        let ptr = unsafe { order.idx_to_ptr::<u8>(1) };
+        assert_eq!(ptr.as_ptr() as usize, 4096); // 1 << 12
+
+        let ptr = unsafe { order.idx_to_ptr::<u8>(2) };
+        assert_eq!(ptr.as_ptr() as usize, 8192); // 2 << 12
+
+        let ptr = unsafe { order.idx_to_ptr::<u8>(3) };
+        assert_eq!(ptr.as_ptr() as usize, 12288); // 3 << 12
+    }
+
+    #[test]
+    fn test_order_ptr_to_idx() {
+        let order = Order::new(12);
+
+        // 测试 ptr 到 idx 的转换
+        let ptr = NonNull::new(4096 as *mut u8).unwrap();
+        assert_eq!(order.ptr_to_idx(ptr), 1);
+
+        let ptr = NonNull::new(8192 as *mut u8).unwrap();
+        assert_eq!(order.ptr_to_idx(ptr), 2);
+    }
+
+    #[test]
+    fn test_order_roundtrip() {
+        let order = Order::new(12);
+
+        // 测试 idx -> ptr -> idx 的往返转换
+        // idx=0 会生成空指针，所以从 1 开始
+        for i in [1, 5, 100, 1000] {
+            let ptr = unsafe { order.idx_to_ptr::<u8>(i) };
+            let idx = order.ptr_to_idx(ptr);
+            assert_eq!(idx, i);
+        }
     }
 }

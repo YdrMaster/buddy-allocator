@@ -1,5 +1,5 @@
 ﻿use customizable_buddy::{BuddyAllocator, LinkedListBuddy, UsizeBuddy};
-use std::ptr::NonNull;
+use std::ptr::{NonNull, addr_of_mut};
 
 type Allocator<const N: usize> = BuddyAllocator<N, UsizeBuddy, LinkedListBuddy>;
 
@@ -14,8 +14,8 @@ static mut MEMORY: Page = Page::ZERO;
 
 fn main() {
     let mut allocator = Allocator::<7>::new();
-    let ptr = NonNull::new(unsafe { MEMORY.0.as_mut_ptr() }).unwrap();
-    let len = core::mem::size_of_val(unsafe { &MEMORY });
+    let ptr = NonNull::new(addr_of_mut!(MEMORY).cast::<u8>()).unwrap();
+    let len = size_of::<Page>();
     allocator.init(3, ptr);
     unsafe { allocator.transfer(ptr, len) };
     println!("{allocator:?}");

@@ -183,15 +183,15 @@ impl fmt::Debug for AvlBuddy {
 
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.l.0.is_some() {
-            write!(f, "l:{:#x?}", self.l.0.unwrap().as_ptr() as usize)?;
-            write!(f, "[{:?}] ", unsafe { self.l.0.unwrap().as_ref().h })?;
+        if let Some(left) = self.l.0 {
+            write!(f, "l:{:#x?}", left.as_ptr() as usize)?;
+            write!(f, "[{:?}] ", unsafe { left.as_ref().h })?;
         } else {
             write!(f, "l:null             ")?;
         }
-        if self.r.0.is_some() {
-            write!(f, "r:{:#x?}", self.r.0.unwrap().as_ptr() as usize)?;
-            write!(f, "[{:?}] ", unsafe { self.r.0.unwrap().as_ref().h })?;
+        if let Some(right) = self.r.0 {
+            write!(f, "r:{:#x?}", right.as_ptr() as usize)?;
+            write!(f, "[{:?}] ", unsafe { right.as_ref().h })?;
         } else {
             write!(f, "r:null             ")?;
         }
@@ -201,8 +201,8 @@ impl fmt::Debug for Node {
 
 impl fmt::Debug for Tree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_some() {
-            write!(f, "{:?}", self.0.unwrap())
+        if let Some(root) = self.0 {
+            write!(f, "{:?}", root)
         } else {
             write!(f, "null")
         }
@@ -232,9 +232,14 @@ fn find_max(node: &NonNull<Node>) -> NonNull<Node> {
     //     [B] (node.r)
     //    /
     //   [?]
-    if unsafe { node.as_ref().r.0.is_some() && node.as_ref().r.0.unwrap().as_ref().r.0.is_some() } {
-        // if have right and it's right
-        find_max(unsafe { &node.as_ref().r.0.unwrap() })
+    let right = unsafe { node.as_ref().r.0 };
+    if let Some(right_node) = right {
+        if unsafe { right_node.as_ref().r.0.is_some() } {
+            // if have right and it's right
+            find_max(&right_node)
+        } else {
+            *node
+        }
     } else {
         *node
         // NonNull::new(node.as_ptr()).unwrap()
@@ -252,8 +257,13 @@ fn find_min(node: &NonNull<Node>) -> NonNull<Node> {
     //   [b]            (min point)
     //    \
     //     [c]
-    if unsafe { node.as_ref().l.0.is_some() && node.as_ref().l.0.unwrap().as_ref().l.0.is_some() } {
-        find_min(unsafe { &node.as_ref().l.0.unwrap() })
+    let left = unsafe { node.as_ref().l.0 };
+    if let Some(left_node) = left {
+        if unsafe { left_node.as_ref().l.0.is_some() } {
+            find_min(&left_node)
+        } else {
+            *node
+        }
     } else {
         *node
         // NonNull::new(node.as_ptr()).unwrap()
@@ -311,7 +321,7 @@ impl Tree {
                                             root.update();
                                         } else {
                                             // right subtree has subtree => delete link and relink this link to it's parent then delete node
-                                            let mut beyond =
+                                            let beyond =
                                                 unsafe { find_min(&node.r.0.unwrap()).as_mut() };
 
                                             if let Some(mut leaf) = beyond.l.0 {
@@ -444,7 +454,7 @@ impl Tree {
                                     }
                                     (true, _) => {
                                         // right higher that left
-                                        let mut beyond =
+                                        let beyond =
                                             unsafe { find_min(&root.r.0.unwrap()).as_mut() };
 
                                         if let Some(mut leaf) = beyond.l.0 {
@@ -462,7 +472,7 @@ impl Tree {
                                             leaf.update();
                                         } else {
                                             // 取右边最高节点出来作为root
-                                            let mut right = unsafe { root.r.0.unwrap().as_mut() };
+                                            let right = unsafe { root.r.0.unwrap().as_mut() };
                                             right.l = Tree(root.l.0);
                                             self.0 = NonNull::new(right);
                                             right.update();
@@ -470,7 +480,7 @@ impl Tree {
                                     }
                                     (false, _) => {
                                         // left higher than right
-                                        let mut beyond =
+                                        let beyond =
                                             unsafe { find_max(&root.l.0.unwrap()).as_mut() };
                                         if let Some(mut leaf) = beyond.r.0 {
                                             let leaf = unsafe { leaf.as_mut() };
@@ -486,7 +496,7 @@ impl Tree {
                                             self.0 = NonNull::new(leaf);
                                             leaf.update();
                                         } else {
-                                            let mut left = unsafe { root.l.0.unwrap().as_mut() };
+                                            let left = unsafe { root.l.0.unwrap().as_mut() };
                                             left.r = Tree(root.r.0);
                                             self.0 = NonNull::new(left);
                                             left.update()
@@ -535,11 +545,11 @@ impl Tree {
                                             leaf.update();
                                             root.update();
                                         } else {
-                                            let mut beyond =
+                                            let beyond =
                                                 unsafe { find_min(&node.r.0.unwrap()).as_mut() };
                                             if let Some(mut leaf) = beyond.l.0 {
                                                 // 如果 beyond 存在左子树
-                                                let mut leaf = unsafe { leaf.as_mut() };
+                                                let leaf = unsafe { leaf.as_mut() };
 
                                                 // 如果存在反方向子树
                                                 if leaf.r.0.is_some() {
@@ -585,7 +595,7 @@ impl Tree {
                                             root.update();
                                         } else {
                                             // left subtree has subtree => delete link and relink this link to it's parent then delete node
-                                            let mut beyond =
+                                            let beyond =
                                                 unsafe { find_max(&node.l.0.unwrap()).as_mut() };
                                             if let Some(mut leaf) = beyond.r.0 {
                                                 let leaf = unsafe { leaf.as_mut() };
