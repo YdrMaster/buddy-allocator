@@ -381,8 +381,8 @@ impl Order {
     }
 
     #[inline]
-    unsafe fn idx_to_ptr<T>(&self, idx: usize) -> NonNull<T> {
-        unsafe { NonNull::new_unchecked((idx << self.0) as *mut _) }
+    fn idx_to_ptr<T>(&self, idx: usize) -> Option<NonNull<T>> {
+        NonNull::new((idx << self.0) as *mut _)
     }
 
     #[inline]
@@ -652,14 +652,15 @@ mod tests {
         let order = Order::new(12);
 
         // 测试 idx 到 ptr 的转换
-        // idx=0 会生成空指针，所以从 1 开始
-        let ptr = unsafe { order.idx_to_ptr::<u8>(1) };
+        // idx=0 对应空指针，返回 None
+        assert!(order.idx_to_ptr::<u8>(0).is_none());
+        let ptr = order.idx_to_ptr::<u8>(1).unwrap();
         assert_eq!(ptr.as_ptr() as usize, 4096); // 1 << 12
 
-        let ptr = unsafe { order.idx_to_ptr::<u8>(2) };
+        let ptr = order.idx_to_ptr::<u8>(2).unwrap();
         assert_eq!(ptr.as_ptr() as usize, 8192); // 2 << 12
 
-        let ptr = unsafe { order.idx_to_ptr::<u8>(3) };
+        let ptr = order.idx_to_ptr::<u8>(3).unwrap();
         assert_eq!(ptr.as_ptr() as usize, 12288); // 3 << 12
     }
 
@@ -682,9 +683,33 @@ mod tests {
         // 测试 idx -> ptr -> idx 的往返转换
         // idx=0 会生成空指针，所以从 1 开始
         for i in [1, 5, 100, 1000] {
-            let ptr = unsafe { order.idx_to_ptr::<u8>(i) };
+            let ptr = order.idx_to_ptr::<u8>(i).unwrap();
             let idx = order.ptr_to_idx(ptr);
             assert_eq!(idx, i);
         }
+    }
+
+    /// 回归测试：低地址缓冲区跨越 2 的幂次边界时，buddy序号为 0 导致空指针。
+    #[test]
+    fn test_transfer_low_address_crossing_boundary() {
+        #[repr(C, align(4096))]
+        struct Buf {
+            _data: [u8; 128 * 1024],
+        }
+        static mut BUF: Buf = Buf { _data: [0; 128 * 1024] };
+
+        type A = BuddyAllocator<32, UsizeBuddy, LinkedListBuddy>;
+        let mut alloc = A::new();
+
+        let ptr = NonNull::new((&raw mut BUF).cast::<u8>()).unwrap();
+        let len = 128 * 1024;
+
+        alloc.init(3, ptr);
+        unsafe { alloc.transfer(ptr, len) };
+
+        let size = NonZeroUsize::new(4096).unwrap();
+        let (p, s) = alloc.allocate::<u8>(0, size).unwrap();
+        assert!(s >= 4096);
+        alloc.deallocate(p, s);
     }
 }
