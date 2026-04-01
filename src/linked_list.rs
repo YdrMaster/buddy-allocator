@@ -50,8 +50,8 @@ impl OligarchyCollection for LinkedListBuddy {
     // 向头结点处插入一个节点
     #[inline]
     fn put(&mut self, idx: usize) {
-        self.free_list
-            .insert_unordered(unsafe { self.order.idx_to_ptr(idx) });
+        let ptr = self.order.idx_to_ptr(idx).expect("block address is null");
+        self.free_list.insert_unordered(ptr);
     }
 }
 
@@ -71,8 +71,12 @@ impl BuddyCollection for LinkedListBuddy {
     // 向对应位置插入一个新的元素
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 伙伴和当前结点存在链表的同一个位置。
-        let node = unsafe { self.order.idx_to_ptr(idx) };
-        let buddy = unsafe { self.order.idx_to_ptr(idx ^ 1) };
+        let node = self.order.idx_to_ptr(idx).expect("block address is null");
+        // buddy序号为 0 时地址为空指针，不可能在空闲链表中，跳过合并。
+        let Some(buddy) = self.order.idx_to_ptr(idx ^ 1) else {
+            self.free_list.insert_unordered(node);
+            return None;
+        };
         if self.free_list.insert(node, buddy) {
             None
         } else {

@@ -77,7 +77,6 @@ use core::{fmt, ptr::NonNull};
 /// 基于平衡二叉查找树的侵入式伙伴行。
 pub struct AvlBuddy {
     tree: Tree,
-    base: usize,
     order: Order,
 }
 
@@ -89,13 +88,11 @@ impl BuddyLine for AvlBuddy {
 
     const EMPTY: Self = Self {
         tree: Tree(None),
-        base: 0,
         order: Order::new(0),
     };
 
     #[inline]
-    fn init(&mut self, order: usize, base: usize) {
-        self.base = base;
+    fn init(&mut self, order: usize, _base: usize) {
         self.order = Order::new(order);
     }
 
@@ -132,6 +129,11 @@ impl BuddyCollection for AvlBuddy {
     /// insert node into avl_buddy
     fn put(&mut self, idx: usize) -> Option<usize> {
         // 需要额外考虑一个事情，就是在进行分配的时候，最小分配单元必须大于Node，因为这个Node实际上是存放在分配的空间中的，因此需要加入判定以确保空间不会出现重叠的情况
+        // buddy序号为 0 时地址为空指针，跳过合并。
+        if idx ^ 1 == 0 {
+            self.tree.insert_no_merge(idx, &self.order);
+            return None;
+        }
         if self.tree.insert(idx, &self.order) {
             None
         } else {
@@ -278,12 +280,14 @@ impl Tree {
         // 这个地方我认为目前的速度瓶颈主要出现在大量使用递归所带来的影响，但是考虑到本lab主要完成的是分配器，因此可能没有办法实现动态的内存分配，进而使用栈或者队列来实现对应操作
 
         // 版本二：在进行插入的时候直接完成对应伙伴节点的删除工作
-        let ptr: NonNull<Node> = unsafe { order.idx_to_ptr(idx) };
+        let ptr: NonNull<Node> = order.idx_to_ptr(idx).expect("block address is null");
         match self.0 {
             // if this node is not empty
             Some(mut root_ptr) => {
                 let root = unsafe { root_ptr.as_mut() };
-                let buddy = unsafe { order.idx_to_ptr(idx ^ 1) };
+                let buddy = order
+                    .idx_to_ptr::<Node>(idx ^ 1)
+                    .expect("buddy address is null");
                 use core::cmp::Ordering::*;
                 // use core::mem::replace;
 
@@ -663,12 +667,39 @@ impl Tree {
             // if this node is empty => insert in this point
             None => {
                 self.0 = Some(ptr);
-                *unsafe { order.idx_to_ptr(idx).as_mut() } = Node {
+                *unsafe { order.idx_to_ptr(idx).unwrap().as_mut() } = Node {
                     l: Tree(None),
                     r: Tree(None),
                     h: 1,
                 };
                 true
+            }
+        }
+    }
+
+    /// 插入结点（不合并buddy）。buddy地址为空时使用。
+    fn insert_no_merge(&mut self, idx: usize, order: &Order) {
+        let ptr: NonNull<Node> = order.idx_to_ptr(idx).expect("block address is null");
+        match self.0 {
+            Some(mut root_ptr) => {
+                let root = unsafe { root_ptr.as_mut() };
+                if ptr < root_ptr {
+                    root.l.insert_no_merge(idx, order);
+                } else {
+                    root.r.insert_no_merge(idx, order);
+                }
+                root.update();
+                self.rotate();
+            }
+            None => {
+                self.0 = Some(ptr);
+                unsafe {
+                    ptr.as_ptr().write(Node {
+                        l: Tree(None),
+                        r: Tree(None),
+                        h: 1,
+                    });
+                }
             }
         }
     }
