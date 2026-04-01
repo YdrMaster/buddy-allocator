@@ -285,7 +285,9 @@ impl Tree {
             // if this node is not empty
             Some(mut root_ptr) => {
                 let root = unsafe { root_ptr.as_mut() };
-                let buddy = order.idx_to_ptr::<Node>(idx ^ 1).expect("buddy address is null");
+                let buddy = order
+                    .idx_to_ptr::<Node>(idx ^ 1)
+                    .expect("buddy address is null");
                 use core::cmp::Ordering::*;
                 // use core::mem::replace;
 

@@ -696,7 +696,9 @@ mod tests {
         struct Buf {
             _data: [u8; 128 * 1024],
         }
-        static mut BUF: Buf = Buf { _data: [0; 128 * 1024] };
+        static mut BUF: Buf = Buf {
+            _data: [0; 128 * 1024],
+        };
 
         type A = BuddyAllocator<32, UsizeBuddy, LinkedListBuddy>;
         let mut alloc = A::new();
